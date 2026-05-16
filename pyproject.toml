@@ -1,0 +1,27 @@
+[project]
+name = "jobapp"
+version = "0.1.0"
+description = "CLI tool to find jobs, tailor resumes with AI, and automate applications"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "python-docx>=1.1",
+    "pypdf>=4.0",
+    "weasyprint>=62",
+    "jinja2>=3.1",
+    "markdown>=3.6",
+    "playwright>=1.45",
+    "rich>=13.0",
+    "click>=8.1",
+]
+
+[project.scripts]
+jobapp = "jobapp.cli:cli"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

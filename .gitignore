@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+config.toml
+output/
+.playwright/
+.jobapp_cache.json

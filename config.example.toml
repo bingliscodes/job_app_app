@@ -1,0 +1,24 @@
+[user]
+name = "Your Name"
+email = "you@example.com"
+phone = ""
+resume_path = "./my_resume.pdf"
+
+[preferences]
+roles = ["backend engineer", "software engineer", "full-stack developer"]
+locations = ["Sydney", "Remote"]
+max_results_per_source = 25
+days_posted = 7
+
+[api_keys]
+# Can also be set via environment variables (ANTHROPIC_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY)
+anthropic = ""
+adzuna_app_id = ""
+adzuna_app_key = ""
+
+[ai]
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+
+[output]
+directory = "./output"
