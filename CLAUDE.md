@@ -79,6 +79,14 @@ verification, and optionally 1 more for re-tailoring if violations are found.
   as clickable hyperlinks in the PDF. Wired via `cli.py:_build_contact_links()`
   and `TailoringEngine.tailor(..., contact_links=...)`.
 
+## Role-Phrase Title Matching
+`sourcing/base.py` provides two helpers used by all keyword-filtering sources:
+
+- `parse_query_phrases(query)` — splits the joined query string (`"backend engineer OR software engineer OR …"`) back into the original role phrases.
+- `title_matches_phrases(title, phrases)` — returns True if any phrase's tokens *all* appear in the title (token-AND, not substring). Matches "Senior Software Engineer" against `"software engineer"`, doesn't match "Property Adjuster" against any phrase containing "or".
+
+Applied by The Muse (where the API has no keyword param) and Adzuna (where it filters out skills-broadened results that don't actually look like engineering roles). Replaced an earlier substring match that leaked because `"OR"` matched any word containing "or" (suppOrt, prOperty).
+
 ## Experience-Level Filtering
 Jobs are filtered by years of experience after sourcing. Configured via `min_years` /
 `max_years` in `[preferences]`, or overridden per-call with `--min-years` / `--max-years`
@@ -126,8 +134,18 @@ aggressively for that to be practical).
 - After landing on the employer page, fills name/email/phone via CSS selector heuristics (`name`, `placeholder`, `id`, `aria-label`, `type=email|tel`) and uploads the resume PDF if a file input is present.
 - Never auto-submits. Waits on `sys.stdin.readline()` so the browser stays open until the user presses Enter in the terminal.
 
+## Local State / Cache Files
+All gitignored, written to the working directory:
+
+- **`.jobapp_cache.json`** — Last search results, keyed by short job ID. Used by `tailor` and `apply` to look up jobs without re-searching. Overwritten each `search`.
+- **`.jobapp_resume_cache.json`** — Cached `StructuredResume` keyed by `resume_path::mtime`. Built lazily by `resume/parser.py:get_cached_structured_resume()` — one Claude call on first use, reused until the resume file changes. Used by `search` (to feed skills into Adzuna's `what_or`) and `tailor`.
+- **`output/<slug>/`** — Per-job tailoring output. Contains `resume.pdf`, `cover_letter.pdf`, and `job_details.json` (raw job data — `apply` doesn't read this, it's a record for the user).
+
+`Job.id` is a 12-char SHA-256 prefix of the job URL (`models.py:Job.id`). `Job.slug` is `<company>_<title>_<posted_date>` with spaces → dashes, used as the output directory name.
+
+`tailor` and `apply` accept any unique prefix of an ID — `jobapp tailor 83235` works if no other cached job ID starts with `83235`. Implemented via `dict.startswith()` lookup in `cli.py:tailor()` and `cli.py:apply()`.
+
 ## Development Notes
-- Job search results are cached to `.jobapp_cache.json` (gitignored) so tailor/apply can reference jobs by ID
 - The Arbeitnow API returns `created_at` as a Unix timestamp (int), not ISO string
 - The Muse API has no keyword search param — filtering is done client-side on job title
 - The Muse API accepts repeated `level=` and `location=` query params for OR filtering
