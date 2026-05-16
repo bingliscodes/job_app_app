@@ -78,6 +78,20 @@ verification, and optionally 1 more for re-tailoring if violations are found.
   Claude inserts them as Markdown links (`[GitHub](https://...)`) so they render
   as clickable hyperlinks in the PDF. Wired via `cli.py:_build_contact_links()`
   and `TailoringEngine.tailor(..., contact_links=...)`.
+- **Experience entry structure** — the tailor prompt pins the exact Markdown shape:
+
+  ```
+  ### {Title} — {Company}
+  *{Dates}*
+
+  - Bullet 1
+  - Bullet 2
+  ```
+
+  Renders as `<h3>` + italic dates `<p>` + `<ul><li>…</li></ul>`. CSS targets
+  `h3 + p` for the italic, tight dates line and forces `list-style-type: disc` /
+  `display: list-item` so bullets always render as proper bullets. Previously the
+  prompt was ambiguous and Claude sometimes inlined bullets with `•` separators.
 
 ## Role-Phrase Title Matching
 `sourcing/base.py` provides two helpers used by all keyword-filtering sources:
@@ -175,5 +189,5 @@ All gitignored, written to the working directory:
 - The Muse API accepts repeated `level=` and `location=` query params for OR filtering
 - Adzuna requires app_id + app_key; source is skipped silently if keys aren't configured
 - Sources receive `locations: list[str]`; each decides how to use it
-- Claude's JSON response sometimes comes wrapped in ```json fences — the tailor engine strips these
+- `tailor/engine.py:_parse_json_response()` handles three response shapes: bare JSON, ```json``` fences, and prose-wrapped JSON (e.g. `"Here are the results:\n{…}"`). On parse failure it scans for a balanced top-level `{…}` block, handling braces inside string values. Raises with the first 500 chars of the response if recovery fails.
 - Browser automation detects common form fields by CSS selectors (name, email, phone, file upload)

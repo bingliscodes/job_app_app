@@ -135,14 +135,22 @@ jobapp apply <job-id>
 ```
 
 Opens a Chromium browser, navigates to the job posting, and attempts to pre-fill:
-- Name, email, phone fields
-- Resume file upload
+- First name + last name (split from `[user].name`, for Greenhouse/Lever/Ashby style
+  forms; falls back to a single full-name field if present)
+- Email
+- Phone (if `phone` is set in `[user]`)
+- LinkedIn URL (from `linkedin_url`)
+- Resume PDF upload
 
 If the job URL is on an aggregator (Adzuna, The Muse), the bot clicks through the
-"Apply for this job" button — including Adzuna's "Receive similar jobs by email"
-interstitial via the "No thanks, take me to the job" link — to land on the
-employer's real application form before filling. On macOS, the browser is brought
-to the foreground via AppleScript so it doesn't launch hidden.
+"Apply" button — including Adzuna's "Receive similar jobs by email" interstitial
+via the "No thanks, take me to the job" link — to land on the employer's real
+application form before filling. On macOS, the browser is brought to the
+foreground via AppleScript so it doesn't launch hidden.
+
+If the destination page looks like a removed listing (title or headings match
+"Job Not Found" / "no longer available" / etc.), the bot prints a clear warning
+and skips pre-fill instead of trying to fill a 404.
 
 The browser stays open for you to review and submit manually. Press Enter in the
 terminal when you're done. **It never auto-submits.**
