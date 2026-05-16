@@ -72,7 +72,8 @@ Jobs are filtered by years of experience after sourcing. Configured via `min_yea
 on `search` and `pipeline`. Two heuristic signals (`sourcing/experience.py`):
 
 1. **Title keywords** — when `max_years < 5`, jobs with `Senior`, `Sr.`, `Staff`, `Principal`,
-   `Lead`, `Head of`, `VP`, `Director`, `Chief`, or `Manager` in the title are dropped.
+   `Lead`, `Head of`, `VP`, `Director`, `Chief`, `Manager`, `Architect`, `Supervisor`, or a
+   Roman-numeral level suffix (`II`, `III`, `IV`, `V`) in the title are dropped.
 2. **Description regex** — `(\d+)\+? years?` matches within ±60 chars of an experience
    context word (`experience`, `professional`, `industry`, `hands-on`, etc.) take the
    minimum N; if N > `max_years` the job is dropped.

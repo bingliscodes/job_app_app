@@ -81,7 +81,8 @@ Set `min_years` and `max_years` in `[preferences]` to filter postings by seniori
 Jobs are excluded when:
 
 - The title contains senior-coded keywords (`Senior`, `Staff`, `Principal`, `Lead`,
-  `Manager`, `Director`, etc.) and `max_years < 5`
+  `Manager`, `Director`, `Architect`, `Supervisor`, etc.) or a Roman-numeral level suffix
+  (`II`, `III`, `IV`, `V`), and `max_years < 5`
 - The description requires more years than `max_years` (e.g. "5+ years experience")
 
 Postings with no detectable signal are kept (lenient). Override per-call with
