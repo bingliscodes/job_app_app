@@ -68,6 +68,17 @@ Data flow: `raw text → parse_resume() → structure_resume() → tailor() → 
 The tailoring uses 3-4 Claude API calls per job: 1 for structuring, 1 for tailoring, 1 for
 verification, and optionally 1 more for re-tailoring if violations are found.
 
+## Resume Output Format
+- **US Letter, single page.** `resume/templates/resume.html` uses 0.6in/0.7in margins,
+  9.5pt / 1.3 line-height, uppercase section headings, compact skills section. The
+  tailor prompt has a hard "ONE PAGE" constraint with quotas (2-3 line summary,
+  3-5 bullets per role, comma-separated skills).
+- **Hyperlinked contact line.** `[user].github_url` and `[user].linkedin_url` in
+  config.toml are passed into the tailor prompt as a "Contact URLs" block;
+  Claude inserts them as Markdown links (`[GitHub](https://...)`) so they render
+  as clickable hyperlinks in the PDF. Wired via `cli.py:_build_contact_links()`
+  and `TailoringEngine.tailor(..., contact_links=...)`.
+
 ## Experience-Level Filtering
 Jobs are filtered by years of experience after sourcing. Configured via `min_years` /
 `max_years` in `[preferences]`, or overridden per-call with `--min-years` / `--max-years`

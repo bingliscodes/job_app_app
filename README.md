@@ -44,6 +44,8 @@ Edit `config.toml` with your details:
 name = "Your Name"
 email = "you@example.com"
 resume_path = "./my_resume.pdf"
+github_url = "https://github.com/yourusername"      # rendered as a hyperlink
+linkedin_url = "https://www.linkedin.com/in/you/"   # rendered as a hyperlink
 
 [preferences]
 roles = ["backend engineer", "software engineer"]
@@ -114,9 +116,12 @@ jobapp tailor <job-id>
 ```
 
 Uses Claude to analyze the job posting and your resume, then generates:
-- A tailored resume PDF with relevant experience highlighted
+- A tailored resume PDF (US Letter, **one page**) with relevant experience highlighted
 - A cover letter addressing the specific role and company
 - A list of key matches and suggestions
+
+The resume includes hyperlinked GitHub/LinkedIn URLs from `[user]` config in the contact
+line, rendered as clickable links in the PDF.
 
 Output is saved to `./output/<company>_<title>_<date>/`.
 
