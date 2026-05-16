@@ -13,6 +13,8 @@ class UserConfig:
     email: str
     phone: str = ""
     resume_path: str = "./my_resume.pdf"
+    github_url: str = ""
+    linkedin_url: str = ""
 
 
 @dataclass

@@ -4,51 +4,55 @@
 <meta charset="utf-8">
 <style>
     @page {
-        size: A4;
-        margin: 1.5cm 2cm;
+        size: Letter;
+        margin: 0.6in 0.7in;
     }
     body {
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-size: 10pt;
-        line-height: 1.5;
+        font-size: 9.5pt;
+        line-height: 1.3;
         color: #1a1a1a;
     }
     h1 {
-        font-size: 20pt;
-        margin-bottom: 0.2em;
+        font-size: 18pt;
+        margin: 0 0 0.1em 0;
         color: #0d47a1;
-        border-bottom: 2px solid #0d47a1;
-        padding-bottom: 0.2em;
+        border-bottom: 1.5px solid #0d47a1;
+        padding-bottom: 0.1em;
     }
     h2 {
-        font-size: 13pt;
-        margin-top: 1em;
-        margin-bottom: 0.3em;
+        font-size: 11pt;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0.6em 0 0.2em 0;
         color: #1565c0;
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 0.15em;
+        border-bottom: 1px solid #bbb;
+        padding-bottom: 0.05em;
     }
     h3 {
-        font-size: 11pt;
-        margin-top: 0.7em;
-        margin-bottom: 0.2em;
+        font-size: 10pt;
+        margin: 0.4em 0 0.15em 0;
     }
     ul {
-        margin: 0.3em 0;
-        padding-left: 1.5em;
+        margin: 0.15em 0;
+        padding-left: 1.2em;
     }
     li {
-        margin-bottom: 0.2em;
+        margin-bottom: 0.05em;
     }
     p {
-        margin: 0.3em 0;
+        margin: 0.2em 0;
     }
     strong {
-        color: #333;
+        color: #1a1a1a;
     }
     a {
         color: #1565c0;
         text-decoration: none;
+    }
+    /* Skills list: keep compact even if Claude returns a list */
+    h2 + ul, h2 + p {
+        margin-top: 0.1em;
     }
 </style>
 </head>

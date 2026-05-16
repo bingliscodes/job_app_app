@@ -52,7 +52,14 @@ Respond with valid JSON:
 Resume guidelines:
 - Use Markdown with ## headers, bullet points, **bold**
 - Include: name, contact, summary, skills (from whitelist only), experience, education
-- Keep concise (1-2 pages when rendered)
+- **CRITICAL: The resume MUST fit on ONE PAGE (US Letter) when rendered.** Be aggressive
+  about cutting less-relevant bullets and trimming the summary. Aim for: a 2-3 line
+  summary, 3-5 bullets per experience entry (most relevant only), one line per education
+  entry. Skills section should be a compact comma-separated list, not a bulleted list.
+- **Contact line**: Use Markdown link syntax for any URLs the candidate has provided in
+  the contact block of the structured resume (e.g. `[GitHub](https://github.com/user)`,
+  `[LinkedIn](https://...)`). When `github_url` and `linkedin_url` are provided in the
+  input, ALWAYS include them as Markdown links in the contact line.
 
 Cover letter guidelines:
 - Address to "Hiring Manager"
@@ -98,8 +105,17 @@ class TailoringEngine:
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
 
-    def tailor(self, resume: StructuredResume, job: Job) -> TailoredMaterial:
-        """Tailor resume with structured constraints and verification."""
+    def tailor(
+        self,
+        resume: StructuredResume,
+        job: Job,
+        contact_links: dict[str, str] | None = None,
+    ) -> TailoredMaterial:
+        """Tailor resume with structured constraints and verification.
+
+        contact_links: optional mapping of label → URL (e.g. {"GitHub": "https://..."})
+        passed through to the prompt so they appear as hyperlinks in the contact line.
+        """
         # Build skills whitelist from the structured resume
         skills_whitelist = sorted(set(resume.skills))
 
@@ -112,7 +128,7 @@ class TailoringEngine:
         resume_json = _serialize_resume(resume)
 
         # Pass 1: Tailor
-        material = self._tailor_pass(resume_json, skills_whitelist, job)
+        material = self._tailor_pass(resume_json, skills_whitelist, job, contact_links=contact_links)
 
         # Pass 2: Verify
         violations = self._verify_pass(resume_json, skills_whitelist, material)
@@ -122,6 +138,7 @@ class TailoringEngine:
             material = self._tailor_pass(
                 resume_json, skills_whitelist, job,
                 violation_feedback=violations,
+                contact_links=contact_links,
             )
 
         return material
@@ -132,7 +149,15 @@ class TailoringEngine:
         skills_whitelist: list[str],
         job: Job,
         violation_feedback: list[dict] | None = None,
+        contact_links: dict[str, str] | None = None,
     ) -> TailoredMaterial:
+        contact_links_section = ""
+        if contact_links:
+            contact_links_section = "\n## Contact URLs (use as Markdown links in the contact line)\n\n"
+            for label, url in contact_links.items():
+                if url:
+                    contact_links_section += f"- {label}: {url}\n"
+
         user_message = f"""\
 ## Candidate's Structured Resume
 
@@ -143,7 +168,7 @@ class TailoringEngine:
 ## Skills Whitelist (ONLY these may be referenced)
 
 {json.dumps(skills_whitelist)}
-
+{contact_links_section}
 ## Job Posting
 
 **Title:** {job.title}

@@ -131,7 +131,8 @@ def tailor(ctx: click.Context, job_id: str) -> None:
 
     console.print(f"Tailoring for [bold]{job.title}[/bold] at [bold]{job.company}[/bold] (with verification)...")
     engine = TailoringEngine(api_key=cfg.api_keys.anthropic, model=cfg.ai.model)
-    material = engine.tailor(structured, job)
+    contact_links = _build_contact_links(cfg)
+    material = engine.tailor(structured, job, contact_links=contact_links)
 
     # Show matches and suggestions
     if material.key_matches:
@@ -251,10 +252,11 @@ def pipeline(ctx: click.Context, min_years: int | None, max_years: int | None, n
 
     # Step 4: Tailor (with verification)
     engine = TailoringEngine(api_key=cfg.api_keys.anthropic, model=cfg.ai.model)
+    contact_links = _build_contact_links(cfg)
 
     for job in selected:
         console.print(f"\n[bold]Tailoring for {job.title} @ {job.company} (with verification)...[/bold]")
-        material = engine.tailor(structured, job)
+        material = engine.tailor(structured, job, contact_links=contact_links)
 
         output_dir = Path(cfg.output.directory) / job.slug
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -269,6 +271,16 @@ def pipeline(ctx: click.Context, min_years: int | None, max_years: int | None, n
             asyncio.run(bot.fill_application(job, str(output_dir / "resume.pdf")))
 
     console.print("\n[green bold]Done![/green bold]")
+
+
+def _build_contact_links(cfg) -> dict[str, str]:
+    """Collect non-empty contact URLs from config to surface as hyperlinks in the resume."""
+    links: dict[str, str] = {}
+    if cfg.user.github_url:
+        links["GitHub"] = cfg.user.github_url
+    if cfg.user.linkedin_url:
+        links["LinkedIn"] = cfg.user.linkedin_url
+    return links
 
 
 def _job_to_dict(job) -> dict:

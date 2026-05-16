@@ -3,6 +3,8 @@ name = "Your Name"
 email = "you@example.com"
 phone = ""
 resume_path = "./my_resume.pdf"
+github_url = ""           # e.g. https://github.com/yourusername — becomes a hyperlink in the resume
+linkedin_url = ""         # e.g. https://www.linkedin.com/in/yourname/
 
 [preferences]
 roles = ["backend engineer", "software engineer", "full-stack developer"]
