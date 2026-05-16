@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import platform
+import subprocess
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from rich.console import Console
 
@@ -9,6 +12,101 @@ if TYPE_CHECKING:
     from jobapp.models import Job
 
 console = Console()
+
+
+async def _click_bypass_link(page):
+    """Look for an email-capture interstitial and click the bypass link.
+
+    Adzuna shows a "Receive similar jobs by email" overlay with a green
+    "No thanks, take me to the job" link that completes the redirect to the
+    employer page. The bypass may open a new tab or navigate the same page.
+    """
+    bypass_selectors = [
+        'a:has-text("No thanks, take me to the job")',
+        'a:has-text("take me to the job")',
+        'a:has-text("No thanks")',
+        'button:has-text("No thanks, take me to the job")',
+        'button:has-text("No thanks")',
+    ]
+
+    bypass_el = None
+    for selector in bypass_selectors:
+        try:
+            el = page.locator(selector).first
+            if await el.count() == 0:
+                continue
+            if await el.is_visible(timeout=3000):
+                bypass_el = el
+                break
+        except Exception:
+            continue
+
+    if bypass_el is None:
+        return None
+
+    console.print("  [dim]Dismissing email-capture overlay...[/dim]")
+    initial_url = page.url
+    new_page = None
+    try:
+        async with page.context.expect_page(timeout=8000) as new_page_info:
+            await bypass_el.click()
+        new_page = await new_page_info.value
+    except Exception:
+        pass
+
+    if new_page is not None:
+        try:
+            await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+        except Exception:
+            pass
+        console.print(f"  [green]→ {new_page.url}[/green]")
+        return new_page
+
+    try:
+        await page.wait_for_url(lambda u: u != initial_url, timeout=8000)
+        await page.wait_for_load_state("domcontentloaded", timeout=20000)
+        console.print(f"  [green]→ {page.url}[/green]")
+        return page
+    except Exception:
+        return None
+
+
+async def _dismiss_overlays(page) -> None:
+    """Best-effort: close cookie banners and email-signup modals that block clicks."""
+    dismiss_selectors = [
+        'button:has-text("Accept all")',
+        'button:has-text("Accept")',
+        'button:has-text("I agree")',
+        'button:has-text("Got it")',
+        'button:has-text("No thanks")',
+        'button:has-text("Close")',
+        'button[aria-label*="close" i]',
+        'button[aria-label*="dismiss" i]',
+    ]
+    for selector in dismiss_selectors:
+        try:
+            el = page.locator(selector).first
+            if await el.count() > 0 and await el.is_visible(timeout=500):
+                await el.click(timeout=2000)
+        except Exception:
+            continue
+
+
+def _activate_app_macos() -> None:
+    """Force the Chrome for Testing window to the macOS foreground.
+
+    Playwright's bring_to_front() only affects tab order inside the browser;
+    it doesn't activate the app at the OS level. AppleScript does.
+    """
+    if platform.system() != "Darwin":
+        return
+    try:
+        subprocess.run(
+            ["osascript", "-e", 'tell application "Google Chrome for Testing" to activate'],
+            check=False, timeout=2, capture_output=True,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
 
 
 class ApplicationBot:
@@ -27,11 +125,22 @@ class ApplicationBot:
         console.print(f"Opening [cyan]{job.url}[/cyan] in browser...")
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
-            context = await browser.new_context()
+            browser = await p.chromium.launch(
+                headless=False,
+                args=["--start-maximized"],
+            )
+            context = await browser.new_context(no_viewport=True)
             page = await context.new_page()
 
             await page.goto(job.url, wait_until="domcontentloaded", timeout=30000)
+            await page.bring_to_front()
+            _activate_app_macos()
+
+            # If we landed on an aggregator (Adzuna, The Muse), click Apply to
+            # reach the real employer application page before filling.
+            page = await self._click_through_if_aggregator(page)
+            await page.bring_to_front()
+            _activate_app_macos()
 
             # Try to detect and fill common form fields
             filled = await self._try_fill_fields(page, resume_pdf_path)
@@ -49,6 +158,79 @@ class ApplicationBot:
             sys.stdin.readline()
 
             await browser.close()
+
+    async def _click_through_if_aggregator(self, page):
+        """If on Adzuna/The Muse, click Apply and follow to the employer site."""
+        host = (urlparse(page.url).hostname or "").lower()
+        aggregator_hosts = ("adzuna.com", "themuse.com")
+        if not any(agg in host for agg in aggregator_hosts):
+            return page
+
+        console.print(f"  [dim]On aggregator ({host}); looking for Apply button...[/dim]")
+
+        # Try to dismiss common overlays (cookie banners, email-signup modals)
+        # that block the Apply button.
+        await _dismiss_overlays(page)
+
+        apply_selectors = [
+            'a:has-text("Apply Now")',
+            'button:has-text("Apply Now")',
+            'a:has-text("Apply on")',          # The Muse: "Apply on {Company}"
+            'a:has-text("Apply for this job")',
+            'a:has-text("Apply")',
+            'button:has-text("Apply")',
+        ]
+
+        target_el = None
+        for selector in apply_selectors:
+            try:
+                el = page.locator(selector).first
+                if await el.count() == 0:
+                    continue
+                if await el.is_visible(timeout=1000):
+                    target_el = el
+                    break
+            except Exception:
+                continue
+
+        if target_el is None:
+            console.print("[yellow]  Apply button not found; staying on aggregator page.[/yellow]")
+            return page
+
+        initial_url = page.url
+
+        await target_el.click()
+
+        # Adzuna shows an email-capture overlay with a "No thanks, take me to
+        # the job" link that completes the redirect. Click it if it appears.
+        bypass_target = await _click_bypass_link(page)
+        if bypass_target is not None:
+            return bypass_target
+
+        # Otherwise wait for either a new tab (target=_blank) or same-page nav.
+        new_page = None
+        try:
+            async with page.context.expect_page(timeout=5000) as new_page_info:
+                pass  # the click already fired; just race the events
+            new_page = await new_page_info.value
+        except Exception:
+            pass
+
+        if new_page is not None:
+            try:
+                await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except Exception:
+                pass
+            console.print(f"  [green]→ {new_page.url}[/green]")
+            return new_page
+
+        try:
+            await page.wait_for_url(lambda u: u != initial_url, timeout=5000)
+            await page.wait_for_load_state("domcontentloaded", timeout=20000)
+            console.print(f"  [green]→ {page.url}[/green]")
+        except Exception:
+            console.print("[yellow]  Apply click did not navigate; staying.[/yellow]")
+        return page
 
     async def _try_fill_fields(self, page, resume_pdf_path: str) -> int:
         """Attempt to fill common application form fields. Returns count of fields filled."""

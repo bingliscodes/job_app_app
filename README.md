@@ -118,7 +118,14 @@ Opens a Chromium browser, navigates to the job posting, and attempts to pre-fill
 - Name, email, phone fields
 - Resume file upload
 
-The browser stays open for you to review and submit manually. **It never auto-submits.**
+If the job URL is on an aggregator (Adzuna, The Muse), the bot clicks through the
+"Apply for this job" button — including Adzuna's "Receive similar jobs by email"
+interstitial via the "No thanks, take me to the job" link — to land on the
+employer's real application form before filling. On macOS, the browser is brought
+to the foreground via AppleScript so it doesn't launch hidden.
+
+The browser stays open for you to review and submit manually. Press Enter in the
+terminal when you're done. **It never auto-submits.**
 
 ### Full pipeline
 

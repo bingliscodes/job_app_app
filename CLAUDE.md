@@ -98,6 +98,12 @@ sink the batch.
 - When `country == "us"`, a post-source filter (`sourcing/location_filter.py`) drops jobs whose only specific locations are foreign (e.g. "Flexible / Remote, Bangalore, India"). Jobs with any US-state tag, "United States", "USA", or remote-with-no-foreign-country pass.
 - Arbeitnow is disabled by default in `sourcing/__init__.py` (EU-focused). Re-enable by adding `ArbeitnowSource()` to the `sources` list.
 
+## Browser Automation (apply)
+- Launches Chromium non-headless with `--start-maximized` and `no_viewport=True`. On macOS, calls `osascript` to activate "Google Chrome for Testing" so the window comes to the foreground.
+- If the apply URL is on an aggregator (`adzuna.com`, `themuse.com`), `_click_through_if_aggregator()` finds and clicks the Apply button, then handles Adzuna's email-capture interstitial by clicking "No thanks, take me to the job". Click may open a new tab (target=_blank) or navigate the same page — both paths are raced.
+- After landing on the employer page, fills name/email/phone via CSS selector heuristics (`name`, `placeholder`, `id`, `aria-label`, `type=email|tel`) and uploads the resume PDF if a file input is present.
+- Never auto-submits. Waits on `sys.stdin.readline()` so the browser stays open until the user presses Enter in the terminal.
+
 ## Development Notes
 - Job search results are cached to `.jobapp_cache.json` (gitignored) so tailor/apply can reference jobs by ID
 - The Arbeitnow API returns `created_at` as a Unix timestamp (int), not ISO string
