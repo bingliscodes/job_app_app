@@ -1,0 +1,139 @@
+# jobapp
+
+AI-powered CLI tool that finds software engineering jobs, tailors your resume for each one using Claude, and helps you apply.
+
+## What it does
+
+1. **Searches** multiple job board APIs (Arbeitnow, The Muse, Adzuna) for recent positions
+2. **Tailors** your resume and generates a cover letter for each job using Claude AI
+3. **Generates** professional PDF documents from HTML/CSS templates
+4. **Pre-fills** application forms in a browser (optional, never auto-submits)
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- An [Anthropic API key](https://console.anthropic.com/) for resume tailoring
+- macOS: `brew install pango` (required for PDF generation)
+
+### Installation
+
+```bash
+git clone <repo-url> && cd job_app_app
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+For browser automation (optional):
+```bash
+playwright install chromium
+```
+
+### Configuration
+
+```bash
+cp config.example.toml config.toml
+```
+
+Edit `config.toml` with your details:
+
+```toml
+[user]
+name = "Your Name"
+email = "you@example.com"
+resume_path = "./my_resume.pdf"
+
+[preferences]
+roles = ["backend engineer", "software engineer"]
+locations = ["Sydney", "Remote"]
+days_posted = 7
+
+[api_keys]
+anthropic = "sk-ant-..."        # or set ANTHROPIC_API_KEY env var
+adzuna_app_id = ""              # optional, from https://developer.adzuna.com
+adzuna_app_key = ""
+```
+
+API keys can also be set via environment variables:
+- `ANTHROPIC_API_KEY`
+- `ADZUNA_APP_ID`
+- `ADZUNA_APP_KEY`
+
+## Usage
+
+### Search for jobs
+
+```bash
+jobapp search
+jobapp search --query "python backend" --location "Remote" --limit 20
+```
+
+Displays a table of recent jobs with short IDs.
+
+### Tailor your resume
+
+```bash
+jobapp tailor <job-id>
+```
+
+Uses Claude to analyze the job posting and your resume, then generates:
+- A tailored resume PDF with relevant experience highlighted
+- A cover letter addressing the specific role and company
+- A list of key matches and suggestions
+
+Output is saved to `./output/<company>_<title>_<date>/`.
+
+### Apply with browser automation
+
+```bash
+jobapp apply <job-id>
+```
+
+Opens a Chromium browser, navigates to the job posting, and attempts to pre-fill:
+- Name, email, phone fields
+- Resume file upload
+
+The browser stays open for you to review and submit manually. **It never auto-submits.**
+
+### Full pipeline
+
+```bash
+jobapp pipeline
+```
+
+Interactive flow that chains all steps: search for jobs, select which ones to apply to, tailor materials for each, and optionally open the browser to apply.
+
+## Job Sources
+
+| Source | API Key Required | Notes |
+|--------|-----------------|-------|
+| [Arbeitnow](https://www.arbeitnow.com/api/job-board-api) | No | Free, no auth. Client-side keyword filtering. |
+| [The Muse](https://www.themuse.com/developers/api/v2) | No (optional) | Free tier: 500 req/hr. Client-side keyword filtering. |
+| [Adzuna](https://developer.adzuna.com/) | Yes | Best filtering (keyword, location, recency). Register for free keys. |
+
+## Supported Resume Formats
+
+- PDF (`.pdf`)
+- Word Document (`.docx`)
+- Plain text (`.txt`, `.md`)
+
+## Project Structure
+
+```
+src/jobapp/
+  cli.py              — CLI commands (search, tailor, apply, pipeline)
+  config.py           — Configuration loading
+  models.py           — Data models (Job, ParsedResume, TailoredMaterial)
+  sourcing/           — Job board API clients
+  resume/parser.py    — Resume text extraction
+  resume/templates/   — HTML/CSS templates for PDF output
+  tailor/engine.py    — Claude AI resume tailoring
+  output/pdf.py       — PDF generation via WeasyPrint
+  apply/browser.py    — Playwright browser automation
+```
+
+## License
+
+MIT
