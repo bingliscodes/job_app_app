@@ -95,14 +95,22 @@ async def _click_bypass_link(page, *, verbose: bool = True):
     if verbose:
         console.print("  [dim]Dismissing email-capture overlay...[/dim]")
     initial_url = page.url
-    new_page = None
-    try:
-        async with page.context.expect_page(timeout=8000) as new_page_info:
-            await bypass_el.click()
-        new_page = await new_page_info.value
-    except Exception:
-        pass
+    captured = {"page": None}
 
+    def _on_new_page(p):
+        captured["page"] = p
+
+    page.context.on("page", _on_new_page)
+    try:
+        try:
+            await bypass_el.click(timeout=5000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(2000)
+    finally:
+        page.context.remove_listener("page", _on_new_page)
+
+    new_page = captured["page"]
     if new_page is not None:
         try:
             await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
@@ -237,13 +245,14 @@ async def _click_through_if_aggregator(page, *, verbose: bool = True):
 
     # Try each selector. Click and see if it navigates (new tab or same page).
     # If it doesn't navigate (e.g. sticky "Apply Now" that only scrolls), try
-    # the next selector instead of giving up.
-    for selector in apply_selectors:
+    # the next selector instead of giving up. The `:visible` pseudo is critical
+    # — Muse renders 3 copies of "Apply on company site" but only the sidebar
+    # one is visible; `.first` without `:visible` returns the hidden header copy.
+    for raw_selector in apply_selectors:
+        selector = raw_selector + ":visible"
         try:
             el = page.locator(selector).first
             if await el.count() == 0:
-                continue
-            if not await el.is_visible(timeout=1000):
                 continue
         except Exception:
             continue
@@ -255,23 +264,32 @@ async def _click_through_if_aggregator(page, *, verbose: bool = True):
             except Exception:
                 console.print(f"  [dim]Trying: {selector!r}[/dim]")
 
+        # Attach a new-page listener BEFORE clicking so we don't miss the
+        # popup event (target=_blank). Playwright's expect_page context
+        # would otherwise need to wrap the click, but races poorly when
+        # the click might do same-page nav instead.
+        captured_new_page = {"page": None}
+
+        def _on_new_page(p):
+            captured_new_page["page"] = p
+
+        page.context.on("page", _on_new_page)
         try:
-            await el.click(timeout=5000)
-        except Exception:
-            continue
+            try:
+                await el.click(timeout=5000)
+            except Exception:
+                continue
+
+            # Give the click 2s to either open a new tab or trigger same-page nav
+            await page.wait_for_timeout(2000)
+        finally:
+            page.context.remove_listener("page", _on_new_page)
 
         bypass_target = await _click_bypass_link(page, verbose=verbose)
         if bypass_target is not None:
             return bypass_target
 
-        new_page = None
-        try:
-            async with page.context.expect_page(timeout=3000) as new_page_info:
-                pass
-            new_page = await new_page_info.value
-        except Exception:
-            pass
-
+        new_page = captured_new_page["page"]
         if new_page is not None:
             try:
                 await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
@@ -281,17 +299,17 @@ async def _click_through_if_aggregator(page, *, verbose: bool = True):
                 console.print(f"  [green]→ {new_page.url}[/green]")
             return new_page
 
-        # Same-page navigation?
-        try:
-            await page.wait_for_url(lambda u: u != initial_url, timeout=3000)
-            await page.wait_for_load_state("domcontentloaded", timeout=20000)
+        if page.url != initial_url:
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except Exception:
+                pass
             if verbose:
                 console.print(f"  [green]→ {page.url}[/green]")
             return page
-        except Exception:
-            if verbose:
-                console.print("  [dim]No navigation — trying next selector...[/dim]")
-            continue
+
+        if verbose:
+            console.print("  [dim]No navigation — trying next selector...[/dim]")
 
     if verbose:
         console.print("[yellow]  Apply button found no working selector; staying on aggregator page.[/yellow]")
