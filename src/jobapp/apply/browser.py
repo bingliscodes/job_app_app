@@ -62,7 +62,7 @@ async def _looks_like_dead_listing(page) -> bool:
     return False
 
 
-async def _click_bypass_link(page):
+async def _click_bypass_link(page, *, verbose: bool = True):
     """Look for an email-capture interstitial and click the bypass link.
 
     Adzuna shows a "Receive similar jobs by email" overlay with a green
@@ -92,7 +92,8 @@ async def _click_bypass_link(page):
     if bypass_el is None:
         return None
 
-    console.print("  [dim]Dismissing email-capture overlay...[/dim]")
+    if verbose:
+        console.print("  [dim]Dismissing email-capture overlay...[/dim]")
     initial_url = page.url
     new_page = None
     try:
@@ -107,13 +108,15 @@ async def _click_bypass_link(page):
             await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
         except Exception:
             pass
-        console.print(f"  [green]→ {new_page.url}[/green]")
+        if verbose:
+            console.print(f"  [green]→ {new_page.url}[/green]")
         return new_page
 
     try:
         await page.wait_for_url(lambda u: u != initial_url, timeout=8000)
         await page.wait_for_load_state("domcontentloaded", timeout=20000)
-        console.print(f"  [green]→ {page.url}[/green]")
+        if verbose:
+            console.print(f"  [green]→ {page.url}[/green]")
         return page
     except Exception:
         return None
@@ -180,6 +183,136 @@ def _activate_app_macos() -> None:
         )
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
+
+
+async def _click_through_if_aggregator(page, *, verbose: bool = True):
+    """If on Adzuna/The Muse, click Apply and follow to the employer site."""
+    host = (urlparse(page.url).hostname or "").lower()
+    aggregator_hosts = ("adzuna.com", "themuse.com")
+    if not any(agg in host for agg in aggregator_hosts):
+        return page
+
+    if verbose:
+        console.print(f"  [dim]On aggregator ({host}); looking for Apply button...[/dim]")
+
+    await page.wait_for_timeout(1000)
+    await _dismiss_overlays(page)
+
+    apply_selectors = [
+        'a:has-text("Apply Now")',
+        'button:has-text("Apply Now")',
+        'a:has-text("Apply on")',
+        'a:has-text("Apply for this job")',
+        'a:has-text("Apply")',
+        'button:has-text("Apply")',
+    ]
+
+    target_el = None
+    for selector in apply_selectors:
+        try:
+            el = page.locator(selector).first
+            if await el.count() == 0:
+                continue
+            if await el.is_visible(timeout=1000):
+                target_el = el
+                break
+        except Exception:
+            continue
+
+    if target_el is None:
+        if verbose:
+            console.print("[yellow]  Apply button not found; staying on aggregator page.[/yellow]")
+        return page
+
+    initial_url = page.url
+    await target_el.click()
+
+    bypass_target = await _click_bypass_link(page, verbose=verbose)
+    if bypass_target is not None:
+        return bypass_target
+
+    new_page = None
+    try:
+        async with page.context.expect_page(timeout=5000) as new_page_info:
+            pass
+        new_page = await new_page_info.value
+    except Exception:
+        pass
+
+    if new_page is not None:
+        try:
+            await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+        except Exception:
+            pass
+        if verbose:
+            console.print(f"  [green]→ {new_page.url}[/green]")
+        return new_page
+
+    try:
+        await page.wait_for_url(lambda u: u != initial_url, timeout=5000)
+        await page.wait_for_load_state("domcontentloaded", timeout=20000)
+        if verbose:
+            console.print(f"  [green]→ {page.url}[/green]")
+    except Exception:
+        if verbose:
+            console.print("[yellow]  Apply click did not navigate; staying.[/yellow]")
+    return page
+
+
+async def validate_job_url(url: str, *, timeout_ms: int = 30000) -> bool:
+    """Return True if the job URL appears to be an active listing.
+
+    Headless Playwright navigation: opens the URL, follows aggregator
+    click-through, then runs the dead-listing heuristic on the final page.
+    On any error (timeout, navigation failure), returns True (lenient —
+    assume active rather than dropping legitimate jobs because of flaky network).
+    """
+    from playwright.async_api import async_playwright
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                context = await browser.new_context()
+                page = await context.new_page()
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                except Exception:
+                    return True  # network/timeout — assume active
+                page = await _click_through_if_aggregator(page, verbose=False)
+                try:
+                    await page.wait_for_timeout(500)
+                except Exception:
+                    pass
+                is_dead = await _looks_like_dead_listing(page)
+                return not is_dead
+            finally:
+                await browser.close()
+    except Exception:
+        return True
+
+
+async def validate_jobs(jobs: list, *, concurrency: int = 4) -> tuple[list, list]:
+    """Validate a list of jobs in parallel. Returns (active, dead) lists.
+
+    `concurrency` caps the number of headless Playwright pages running
+    simultaneously to avoid hammering the network or local resources.
+    """
+    import asyncio
+
+    sem = asyncio.Semaphore(concurrency)
+    results: list[tuple[object, bool]] = []
+
+    async def _check(job):
+        async with sem:
+            console.print(f"  [dim]Checking {job.title[:50]} @ {job.company}...[/dim]")
+            ok = await validate_job_url(job.url)
+            return job, ok
+
+    pairs = await asyncio.gather(*[_check(j) for j in jobs])
+    active = [j for j, ok in pairs if ok]
+    dead = [j for j, ok in pairs if not ok]
+    return active, dead
 
 
 class ApplicationBot:
@@ -249,78 +382,7 @@ class ApplicationBot:
             await browser.close()
 
     async def _click_through_if_aggregator(self, page):
-        """If on Adzuna/The Muse, click Apply and follow to the employer site."""
-        host = (urlparse(page.url).hostname or "").lower()
-        aggregator_hosts = ("adzuna.com", "themuse.com")
-        if not any(agg in host for agg in aggregator_hosts):
-            return page
-
-        console.print(f"  [dim]On aggregator ({host}); looking for Apply button...[/dim]")
-
-        # Give modals/popups a moment to render before we try to dismiss them
-        # (Adzuna's email-capture overlay appears with a small delay on load).
-        await page.wait_for_timeout(1000)
-        await _dismiss_overlays(page)
-
-        apply_selectors = [
-            'a:has-text("Apply Now")',
-            'button:has-text("Apply Now")',
-            'a:has-text("Apply on")',          # The Muse: "Apply on {Company}"
-            'a:has-text("Apply for this job")',
-            'a:has-text("Apply")',
-            'button:has-text("Apply")',
-        ]
-
-        target_el = None
-        for selector in apply_selectors:
-            try:
-                el = page.locator(selector).first
-                if await el.count() == 0:
-                    continue
-                if await el.is_visible(timeout=1000):
-                    target_el = el
-                    break
-            except Exception:
-                continue
-
-        if target_el is None:
-            console.print("[yellow]  Apply button not found; staying on aggregator page.[/yellow]")
-            return page
-
-        initial_url = page.url
-
-        await target_el.click()
-
-        # Adzuna shows an email-capture overlay with a "No thanks, take me to
-        # the job" link that completes the redirect. Click it if it appears.
-        bypass_target = await _click_bypass_link(page)
-        if bypass_target is not None:
-            return bypass_target
-
-        # Otherwise wait for either a new tab (target=_blank) or same-page nav.
-        new_page = None
-        try:
-            async with page.context.expect_page(timeout=5000) as new_page_info:
-                pass  # the click already fired; just race the events
-            new_page = await new_page_info.value
-        except Exception:
-            pass
-
-        if new_page is not None:
-            try:
-                await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
-            except Exception:
-                pass
-            console.print(f"  [green]→ {new_page.url}[/green]")
-            return new_page
-
-        try:
-            await page.wait_for_url(lambda u: u != initial_url, timeout=5000)
-            await page.wait_for_load_state("domcontentloaded", timeout=20000)
-            console.print(f"  [green]→ {page.url}[/green]")
-        except Exception:
-            console.print("[yellow]  Apply click did not navigate; staying.[/yellow]")
-        return page
+        return await _click_through_if_aggregator(page, verbose=True)
 
     async def _try_fill_fields(self, page, resume_pdf_path: str) -> int:
         """Attempt to fill common application form fields. Returns count of fields filled."""

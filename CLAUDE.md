@@ -128,6 +128,16 @@ aggressively for that to be practical).
 - When `country == "us"`, a post-source filter (`sourcing/location_filter.py`) drops jobs whose only specific locations are foreign (e.g. "Flexible / Remote, Bangalore, India"). Jobs with any US-state tag, "United States", "USA", or remote-with-no-foreign-country pass.
 - Arbeitnow is disabled by default in `sourcing/__init__.py` (EU-focused). Re-enable by adding `ArbeitnowSource()` to the `sources` list.
 
+## Pre-Tailor Validation (pipeline)
+`apply/browser.py` exposes `validate_job_url(url)` and `validate_jobs(jobs)` which
+run a headless Playwright session to navigate the URL, click through the aggregator,
+and apply the dead-listing heuristic. The `pipeline` command calls `validate_jobs`
+after the user's selection — typically 1-5 jobs — to drop dead listings before
+spending Claude tokens on tailoring. Concurrency is capped at 4 parallel browser
+pages. Disable with `--no-validate`. Lenient on errors: timeouts/navigation
+failures keep the job (assume active) rather than dropping potentially valid jobs
+because of flaky network.
+
 ## Browser Automation (apply)
 - Launches Chromium non-headless with `--start-maximized` and `no_viewport=True`. On macOS, calls `osascript` to activate "Google Chrome for Testing" so the window comes to the foreground.
 - If the apply URL is on an aggregator (`adzuna.com`, `themuse.com`), `_click_through_if_aggregator()` finds and clicks the Apply button, then handles Adzuna's email-capture interstitial by clicking "No thanks, take me to the job". Click may open a new tab (target=_blank) or navigate the same page — both paths are raced.

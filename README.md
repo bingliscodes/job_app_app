@@ -151,9 +151,15 @@ terminal when you're done. **It never auto-submits.**
 
 ```bash
 jobapp pipeline
+jobapp pipeline --no-validate   # skip the live-listing check
 ```
 
-Interactive flow that chains all steps: search for jobs, select which ones to apply to, tailor materials for each, and optionally open the browser to apply.
+Interactive flow that chains all steps:
+1. **Search** with all configured filters
+2. **Select** the jobs you want to apply to
+3. **Validate** each is still an active listing (headless Playwright; skips dead pages so you don't spend tailoring tokens on them) — disable with `--no-validate`
+4. **Tailor** resume + cover letter for each
+5. **Apply** by opening the browser, optionally per job
 
 ## Job Sources
 

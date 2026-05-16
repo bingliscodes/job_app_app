@@ -197,8 +197,15 @@ def apply(ctx: click.Context, job_id: str) -> None:
 @click.option("--min-years", type=int, default=None, help="Minimum years of experience (overrides config)")
 @click.option("--max-years", type=int, default=None, help="Maximum years of experience (overrides config)")
 @click.option("--no-skills", is_flag=True, help="Skip resume-skills broadening on Adzuna")
+@click.option("--no-validate", is_flag=True, help="Skip the live-listing check before tailoring")
 @click.pass_context
-def pipeline(ctx: click.Context, min_years: int | None, max_years: int | None, no_skills: bool) -> None:
+def pipeline(
+    ctx: click.Context,
+    min_years: int | None,
+    max_years: int | None,
+    no_skills: bool,
+    no_validate: bool,
+) -> None:
     """Interactive pipeline: search → select → tailor → apply."""
     from jobapp.models import Job
     from jobapp.resume.parser import parse_resume
@@ -236,6 +243,22 @@ def pipeline(ctx: click.Context, min_years: int | None, max_years: int | None, n
     if not selected:
         console.print("[red]No valid jobs selected.[/red]")
         return
+
+    # Step 2.5: Validate that each selected job is still active. Aggregator
+    # feeds (especially The Muse) don't prune removed listings; checking now
+    # avoids spending Claude tokens tailoring jobs that 404 at apply time.
+    if not no_validate:
+        from jobapp.apply.browser import validate_jobs
+        console.print(f"\n[bold]Checking {len(selected)} listing(s) are still active...[/bold]")
+        active, dead = asyncio.run(validate_jobs(selected))
+        for j in dead:
+            console.print(f"  [red]✗ Removed/expired:[/red] {j.title} @ {j.company}")
+        if not active:
+            console.print("[yellow]All selected listings appear to be dead. Re-run `jobapp search` and pick others.[/yellow]")
+            return
+        if dead:
+            console.print(f"  [green]{len(active)} of {len(selected)} active — proceeding with those.[/green]")
+        selected = active
 
     # Step 3: Parse and structure resume
     if not cfg.api_keys.anthropic:
