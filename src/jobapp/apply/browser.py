@@ -185,6 +185,22 @@ def _activate_app_macos() -> None:
         pass
 
 
+async def _try_fill_first_visible(page, selectors: list[str], value: str) -> bool:
+    """Fill the first visible input matching any of the given selectors. Returns True if filled."""
+    for selector in selectors:
+        try:
+            el = page.locator(selector).first
+            if await el.count() == 0:
+                continue
+            if not await el.is_visible(timeout=1000):
+                continue
+            await el.fill(value)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 async def _click_through_if_aggregator(page, *, verbose: bool = True):
     """If on Adzuna/The Muse, click Apply and follow to the employer site."""
     host = (urlparse(page.url).hostname or "").lower()
@@ -198,64 +214,87 @@ async def _click_through_if_aggregator(page, *, verbose: bool = True):
     await page.wait_for_timeout(1000)
     await _dismiss_overlays(page)
 
+    # Selectors are tried in order; most specific first. The sticky "Apply Now"
+    # button in The Muse's header often just scrolls the page rather than
+    # navigating, so we prefer the more explicit "Apply on …" / "Apply for this
+    # job" variants.
     apply_selectors = [
+        'a:has-text("Apply on Company")',
+        'button:has-text("Apply on Company")',
+        'a:has-text("Apply on company site")',
+        'button:has-text("Apply on company site")',
+        'a:has-text("Apply on")',
+        'button:has-text("Apply on")',
+        'a:has-text("Apply Externally")',
+        'a:has-text("Apply for this job")',
         'a:has-text("Apply Now")',
         'button:has-text("Apply Now")',
-        'a:has-text("Apply on")',
-        'a:has-text("Apply for this job")',
         'a:has-text("Apply")',
         'button:has-text("Apply")',
     ]
 
-    target_el = None
+    initial_url = page.url
+
+    # Try each selector. Click and see if it navigates (new tab or same page).
+    # If it doesn't navigate (e.g. sticky "Apply Now" that only scrolls), try
+    # the next selector instead of giving up.
     for selector in apply_selectors:
         try:
             el = page.locator(selector).first
             if await el.count() == 0:
                 continue
-            if await el.is_visible(timeout=1000):
-                target_el = el
-                break
+            if not await el.is_visible(timeout=1000):
+                continue
         except Exception:
             continue
 
-    if target_el is None:
         if verbose:
-            console.print("[yellow]  Apply button not found; staying on aggregator page.[/yellow]")
-        return page
+            try:
+                label = (await el.text_content(timeout=500) or "").strip()[:40]
+                console.print(f"  [dim]Trying: {selector!r} ({label!r})[/dim]")
+            except Exception:
+                console.print(f"  [dim]Trying: {selector!r}[/dim]")
 
-    initial_url = page.url
-    await target_el.click()
-
-    bypass_target = await _click_bypass_link(page, verbose=verbose)
-    if bypass_target is not None:
-        return bypass_target
-
-    new_page = None
-    try:
-        async with page.context.expect_page(timeout=5000) as new_page_info:
-            pass
-        new_page = await new_page_info.value
-    except Exception:
-        pass
-
-    if new_page is not None:
         try:
-            await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+            await el.click(timeout=5000)
+        except Exception:
+            continue
+
+        bypass_target = await _click_bypass_link(page, verbose=verbose)
+        if bypass_target is not None:
+            return bypass_target
+
+        new_page = None
+        try:
+            async with page.context.expect_page(timeout=3000) as new_page_info:
+                pass
+            new_page = await new_page_info.value
         except Exception:
             pass
-        if verbose:
-            console.print(f"  [green]→ {new_page.url}[/green]")
-        return new_page
 
-    try:
-        await page.wait_for_url(lambda u: u != initial_url, timeout=5000)
-        await page.wait_for_load_state("domcontentloaded", timeout=20000)
-        if verbose:
-            console.print(f"  [green]→ {page.url}[/green]")
-    except Exception:
-        if verbose:
-            console.print("[yellow]  Apply click did not navigate; staying.[/yellow]")
+        if new_page is not None:
+            try:
+                await new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except Exception:
+                pass
+            if verbose:
+                console.print(f"  [green]→ {new_page.url}[/green]")
+            return new_page
+
+        # Same-page navigation?
+        try:
+            await page.wait_for_url(lambda u: u != initial_url, timeout=3000)
+            await page.wait_for_load_state("domcontentloaded", timeout=20000)
+            if verbose:
+                console.print(f"  [green]→ {page.url}[/green]")
+            return page
+        except Exception:
+            if verbose:
+                console.print("  [dim]No navigation — trying next selector...[/dim]")
+            continue
+
+    if verbose:
+        console.print("[yellow]  Apply button found no working selector; staying on aggregator page.[/yellow]")
     return page
 
 
@@ -389,41 +428,90 @@ class ApplicationBot:
         filled = 0
         cfg = self.cfg
 
-        # Common field selectors for name, email, phone
-        field_mappings = [
-            # (value, list of selectors to try)
-            (cfg.user.name, [
+        # Split the name for forms that have separate first/last fields
+        # (Greenhouse, Lever, Ashby, Workable all do this).
+        name_parts = cfg.user.name.strip().split(None, 1) if cfg.user.name else []
+        first_name = name_parts[0] if name_parts else ""
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+        # Try split-name fields first. If found, also skip the full-name pass.
+        split_name_filled = False
+        if first_name:
+            first_selectors = [
+                'input[autocomplete="given-name"]',
+                'input[name="first_name"]',
+                'input[id="first_name"]',
+                'input[name*="first" i][name*="name" i]',
+                'input[id*="first" i][id*="name" i]',
+                'input[placeholder*="First name" i]',
+                'input[aria-label*="First name" i]',
+            ]
+            if await _try_fill_first_visible(page, first_selectors, first_name):
+                filled += 1
+                split_name_filled = True
+
+        if last_name:
+            last_selectors = [
+                'input[autocomplete="family-name"]',
+                'input[name="last_name"]',
+                'input[id="last_name"]',
+                'input[name*="last" i][name*="name" i]',
+                'input[id*="last" i][id*="name" i]',
+                'input[placeholder*="Last name" i]',
+                'input[aria-label*="Last name" i]',
+            ]
+            if await _try_fill_first_visible(page, last_selectors, last_name):
+                filled += 1
+                split_name_filled = True
+
+        # Fall back to "full name" field if no split fields were found.
+        if not split_name_filled and cfg.user.name:
+            full_name_selectors = [
+                'input[autocomplete="name"]',
+                'input[name="name"]',
+                'input[id="name"]',
                 'input[name*="name" i]',
                 'input[placeholder*="name" i]',
                 'input[id*="name" i]',
                 'input[aria-label*="name" i]',
-            ]),
-            (cfg.user.email, [
-                'input[type="email"]',
-                'input[name*="email" i]',
-                'input[placeholder*="email" i]',
-                'input[id*="email" i]',
-            ]),
-            (cfg.user.phone, [
-                'input[type="tel"]',
-                'input[name*="phone" i]',
-                'input[placeholder*="phone" i]',
-                'input[id*="phone" i]',
-            ]),
-        ]
+            ]
+            if await _try_fill_first_visible(page, full_name_selectors, cfg.user.name):
+                filled += 1
 
-        for value, selectors in field_mappings:
-            if not value:
-                continue
-            for selector in selectors:
-                try:
-                    el = page.locator(selector).first
-                    if await el.is_visible(timeout=1000):
-                        await el.fill(value)
-                        filled += 1
-                        break
-                except Exception:
-                    continue
+        # Email
+        if cfg.user.email:
+            email_selectors = [
+                'input[type="email"]',
+                'input[autocomplete="email"]',
+                'input[name*="email" i]',
+                'input[id*="email" i]',
+                'input[placeholder*="email" i]',
+            ]
+            if await _try_fill_first_visible(page, email_selectors, cfg.user.email):
+                filled += 1
+
+        # Phone
+        if cfg.user.phone:
+            phone_selectors = [
+                'input[type="tel"]',
+                'input[autocomplete="tel"]',
+                'input[name*="phone" i]',
+                'input[id*="phone" i]',
+                'input[placeholder*="phone" i]',
+            ]
+            if await _try_fill_first_visible(page, phone_selectors, cfg.user.phone):
+                filled += 1
+
+        # LinkedIn URL — Greenhouse, Lever, and most ATSs have an explicit field.
+        if cfg.user.linkedin_url:
+            linkedin_selectors = [
+                'input[name*="linkedin" i]',
+                'input[id*="linkedin" i]',
+                'input[placeholder*="LinkedIn" i]',
+                'input[aria-label*="LinkedIn" i]',
+            ]
+            if await _try_fill_first_visible(page, linkedin_selectors, cfg.user.linkedin_url):
+                filled += 1
 
         # Try to upload resume
         try:
