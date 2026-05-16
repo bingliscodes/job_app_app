@@ -9,6 +9,11 @@ roles = ["backend engineer", "software engineer", "full-stack developer"]
 locations = ["Sydney", "Remote"]
 max_results_per_source = 25
 days_posted = 7
+# Years-of-experience range. Filters out jobs with senior-coded titles
+# (Senior/Staff/Principal/Lead/etc.) and jobs whose descriptions require
+# more than max_years. Jobs with no detectable experience signal are kept.
+min_years = 0
+max_years = 4
 
 [api_keys]
 # Can also be set via environment variables (ANTHROPIC_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY)

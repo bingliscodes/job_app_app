@@ -17,11 +17,12 @@
 src/jobapp/
   cli.py              — Click CLI entry point, all commands
   config.py           — TOML config loading + env var override
-  models.py           — Dataclasses: Job, ParsedResume, TailoredMaterial
+  models.py           — Dataclasses: Job, ParsedResume, StructuredResume, TailoredMaterial
   sourcing/           — Job board API clients (base.py, arbeitnow.py, themuse.py, adzuna.py)
-  resume/parser.py    — PDF/DOCX/TXT text extraction
+                        and experience.py (years-of-experience filter)
+  resume/parser.py    — PDF/DOCX/TXT text extraction + Claude-powered structured extraction
   resume/templates/   — HTML/CSS templates for resume and cover letter PDFs
-  tailor/engine.py    — Claude API integration, prompt engineering, JSON response parsing
+  tailor/engine.py    — Claude API integration, constrained tailoring + verification pass
   output/pdf.py       — WeasyPrint HTML→PDF rendering
   apply/browser.py    — Playwright form detection and pre-filling
 ```
@@ -30,6 +31,7 @@ src/jobapp/
 ```bash
 source .venv/bin/activate
 jobapp search              # Search job boards
+jobapp search --min-years 0 --max-years 4   # Filter by years of experience
 jobapp tailor <ID>         # Tailor resume + cover letter for a job
 jobapp apply <ID>          # Open browser, pre-fill application
 jobapp pipeline            # Interactive: search → select → tailor → apply
@@ -44,10 +46,45 @@ jobapp pipeline            # Interactive: search → select → tailor → apply
 - `brew install pango` (required for WeasyPrint PDF generation)
 - `playwright install chromium` (required for browser automation)
 
+## Anti-Hallucination Safeguards
+The tailoring pipeline has three layers to prevent fabricated content:
+
+1. **Structured extraction** (`resume/parser.py:structure_resume`) — Claude parses raw resume
+   text into typed JSON: `StructuredResume` with `ExperienceEntry`, `EducationEntry`,
+   `ProjectEntry`, skills list, etc. This becomes the single source of truth.
+2. **Skills whitelist + constrained prompt** (`tailor/engine.py:_tailor_pass`) — The tailoring
+   prompt receives structured JSON and an explicit skills whitelist (extracted from the resume).
+   Hard constraints: only whitelisted skills, only existing experience bullets (rephrased, not
+   invented), no fabricated metrics/numbers.
+3. **Verification pass** (`tailor/engine.py:_verify_pass`) — A second Claude call compares the
+   tailored output against the original structured resume. Checks for fabricated skills,
+   experience, metrics, credentials. If violations are found, the engine re-tailors with
+   explicit feedback about what to remove.
+
+Data flow: `raw text → parse_resume() → structure_resume() → tailor() → verify → output`
+
+The tailoring uses 3-4 Claude API calls per job: 1 for structuring, 1 for tailoring, 1 for
+verification, and optionally 1 more for re-tailoring if violations are found.
+
+## Experience-Level Filtering
+Jobs are filtered by years of experience after sourcing. Configured via `min_years` /
+`max_years` in `[preferences]`, or overridden per-call with `--min-years` / `--max-years`
+on `search` and `pipeline`. Two heuristic signals (`sourcing/experience.py`):
+
+1. **Title keywords** — when `max_years < 5`, jobs with `Senior`, `Sr.`, `Staff`, `Principal`,
+   `Lead`, `Head of`, `VP`, `Director`, `Chief`, or `Manager` in the title are dropped.
+2. **Description regex** — `(\d+)\+? years?` matches within ±60 chars of an experience
+   context word (`experience`, `professional`, `industry`, `hands-on`, etc.) take the
+   minimum N; if N > `max_years` the job is dropped.
+
+Lenient by design: jobs with no detectable experience signal are kept. The Muse's native
+`level=` filter is also passed (`Entry Level`, `Mid Level`, etc.) via `themuse_levels_for_range()`.
+
 ## Development Notes
 - Job search results are cached to `.jobapp_cache.json` (gitignored) so tailor/apply can reference jobs by ID
 - The Arbeitnow API returns `created_at` as a Unix timestamp (int), not ISO string
 - The Muse API has no keyword search param — filtering is done client-side on job title
+- The Muse API accepts repeated `level=` query params for filtering by seniority
 - Adzuna requires app_id + app_key; source is skipped silently if keys aren't configured
 - Claude's JSON response sometimes comes wrapped in ```json fences — the tailor engine strips these
 - Browser automation detects common form fields by CSS selectors (name, email, phone, file upload)

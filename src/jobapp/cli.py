@@ -40,13 +40,29 @@ def cli(ctx: click.Context, config_path: str) -> None:
 @click.option("--query", "-q", help="Override search query (default: uses config roles)")
 @click.option("--location", "-l", help="Override location (default: uses config locations)")
 @click.option("--limit", "-n", default=25, help="Max results per source")
+@click.option("--min-years", type=int, default=None, help="Minimum years of experience (overrides config)")
+@click.option("--max-years", type=int, default=None, help="Maximum years of experience (overrides config)")
 @click.pass_context
-def search(ctx: click.Context, query: str | None, location: str | None, limit: int) -> None:
+def search(
+    ctx: click.Context,
+    query: str | None,
+    location: str | None,
+    limit: int,
+    min_years: int | None,
+    max_years: int | None,
+) -> None:
     """Search job boards for recent positions."""
     from jobapp.sourcing import search_all_sources
 
     cfg = ctx.obj["config"]
-    jobs = asyncio.run(search_all_sources(cfg, query=query, location=location, limit=limit))
+    jobs = asyncio.run(search_all_sources(
+        cfg,
+        query=query,
+        location=location,
+        limit=limit,
+        min_years=min_years,
+        max_years=max_years,
+    ))
 
     if not jobs:
         console.print("[yellow]No jobs found. Try broadening your search.[/yellow]")
@@ -174,8 +190,10 @@ def apply(ctx: click.Context, job_id: str) -> None:
 
 
 @cli.command()
+@click.option("--min-years", type=int, default=None, help="Minimum years of experience (overrides config)")
+@click.option("--max-years", type=int, default=None, help="Maximum years of experience (overrides config)")
 @click.pass_context
-def pipeline(ctx: click.Context) -> None:
+def pipeline(ctx: click.Context, min_years: int | None, max_years: int | None) -> None:
     """Interactive pipeline: search → select → tailor → apply."""
     from jobapp.models import Job
     from jobapp.resume.parser import parse_resume
@@ -188,7 +206,7 @@ def pipeline(ctx: click.Context) -> None:
 
     # Step 1: Search
     console.print("[bold]Step 1: Searching for jobs...[/bold]")
-    jobs = asyncio.run(search_all_sources(cfg))
+    jobs = asyncio.run(search_all_sources(cfg, min_years=min_years, max_years=max_years))
 
     if not jobs:
         console.print("[yellow]No jobs found.[/yellow]")

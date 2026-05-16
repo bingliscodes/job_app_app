@@ -49,6 +49,8 @@ resume_path = "./my_resume.pdf"
 roles = ["backend engineer", "software engineer"]
 locations = ["Sydney", "Remote"]
 days_posted = 7
+min_years = 0      # filter out roles that require more than max_years experience
+max_years = 4
 
 [api_keys]
 anthropic = "sk-ant-..."        # or set ANTHROPIC_API_KEY env var
@@ -68,9 +70,22 @@ API keys can also be set via environment variables:
 ```bash
 jobapp search
 jobapp search --query "python backend" --location "Remote" --limit 20
+jobapp search --min-years 0 --max-years 4   # target entry/mid-level only
 ```
 
 Displays a table of recent jobs with short IDs.
+
+#### Years-of-experience filter
+
+Set `min_years` and `max_years` in `[preferences]` to filter postings by seniority.
+Jobs are excluded when:
+
+- The title contains senior-coded keywords (`Senior`, `Staff`, `Principal`, `Lead`,
+  `Manager`, `Director`, etc.) and `max_years < 5`
+- The description requires more years than `max_years` (e.g. "5+ years experience")
+
+Postings with no detectable signal are kept (lenient). Override per-call with
+`--min-years` / `--max-years` on `search` and `pipeline`.
 
 ### Tailor your resume
 
