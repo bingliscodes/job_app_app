@@ -95,19 +95,24 @@ def tailor(ctx: click.Context, job_id: str) -> None:
     job_data = next(iter(matches.values()))
     job = Job(**{k: v for k, v in job_data.items() if k != "id"})
 
-    # Parse resume
+    # Parse and structure resume
     resume_path = cfg.user.resume_path
-    console.print(f"Parsing resume from [cyan]{resume_path}[/cyan]...")
-    resume = parse_resume(resume_path)
-
-    # Tailor with Claude
     if not cfg.api_keys.anthropic:
         console.print("[red]Error: Anthropic API key not set. Set ANTHROPIC_API_KEY or add to config.toml.[/red]")
         return
 
-    console.print(f"Tailoring for [bold]{job.title}[/bold] at [bold]{job.company}[/bold]...")
+    console.print(f"Parsing resume from [cyan]{resume_path}[/cyan]...")
+    parsed = parse_resume(resume_path)
+
+    console.print("Extracting structured resume sections...")
+    from jobapp.resume.parser import structure_resume
+    structured = structure_resume(parsed, api_key=cfg.api_keys.anthropic, model=cfg.ai.model)
+    console.print(f"  Found [cyan]{len(structured.skills)}[/cyan] skills, "
+                  f"[cyan]{len(structured.experience)}[/cyan] experience entries")
+
+    console.print(f"Tailoring for [bold]{job.title}[/bold] at [bold]{job.company}[/bold] (with verification)...")
     engine = TailoringEngine(api_key=cfg.api_keys.anthropic, model=cfg.ai.model)
-    material = engine.tailor(resume, job)
+    material = engine.tailor(structured, job)
 
     # Show matches and suggestions
     if material.key_matches:
@@ -207,20 +212,25 @@ def pipeline(ctx: click.Context) -> None:
         console.print("[red]No valid jobs selected.[/red]")
         return
 
-    # Step 3: Parse resume
-    console.print(f"\n[bold]Step 3: Parsing resume...[/bold]")
-    resume = parse_resume(cfg.user.resume_path)
-
-    # Step 4: Tailor
+    # Step 3: Parse and structure resume
     if not cfg.api_keys.anthropic:
         console.print("[red]Error: Anthropic API key not set.[/red]")
         return
 
+    console.print(f"\n[bold]Step 3: Parsing and structuring resume...[/bold]")
+    parsed = parse_resume(cfg.user.resume_path)
+
+    from jobapp.resume.parser import structure_resume
+    structured = structure_resume(parsed, api_key=cfg.api_keys.anthropic, model=cfg.ai.model)
+    console.print(f"  Found [cyan]{len(structured.skills)}[/cyan] skills, "
+                  f"[cyan]{len(structured.experience)}[/cyan] experience entries")
+
+    # Step 4: Tailor (with verification)
     engine = TailoringEngine(api_key=cfg.api_keys.anthropic, model=cfg.ai.model)
 
     for job in selected:
-        console.print(f"\n[bold]Tailoring for {job.title} @ {job.company}...[/bold]")
-        material = engine.tailor(resume, job)
+        console.print(f"\n[bold]Tailoring for {job.title} @ {job.company} (with verification)...[/bold]")
+        material = engine.tailor(structured, job)
 
         output_dir = Path(cfg.output.directory) / job.slug
         output_dir.mkdir(parents=True, exist_ok=True)

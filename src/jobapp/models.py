@@ -37,6 +37,44 @@ class ParsedResume:
 
 
 @dataclass
+class ExperienceEntry:
+    company: str
+    title: str
+    dates: str
+    bullets: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EducationEntry:
+    institution: str
+    degree: str
+    dates: str = ""
+    details: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ProjectEntry:
+    name: str
+    description: str
+    technologies: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StructuredResume:
+    """Resume broken into typed sections — the single source of truth for tailoring."""
+    name: str
+    contact: str
+    summary: str
+    skills: list[str]
+    experience: list[ExperienceEntry]
+    education: list[EducationEntry]
+    projects: list[ProjectEntry] = field(default_factory=list)
+    certifications: list[str] = field(default_factory=list)
+    raw_text: str = ""
+    source_path: str = ""
+
+
+@dataclass
 class TailoredMaterial:
     job: Job
     tailored_resume_md: str
