@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from jobapp.models import Job
-from jobapp.sourcing.base import JobSource
+from jobapp.sourcing.base import JobSource, parse_query_phrases, title_matches_phrases
 
 
 class ArbeitnowSource(JobSource):
@@ -22,7 +22,7 @@ class ArbeitnowSource(JobSource):
 
         raw_jobs = data if isinstance(data, list) else data.get("data", [])
 
-        query_lower = query.lower()
+        phrases = parse_query_phrases(query)
         location_lower = location.lower()
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_posted)
 
@@ -33,9 +33,10 @@ class ArbeitnowSource(JobSource):
             loc = item.get("location", "")
             company = item.get("company_name", "") or item.get("company", "")
 
-            # Client-side keyword filtering
-            text = f"{title} {desc}".lower()
-            if query_lower and not any(word in text for word in query_lower.split()):
+            # Client-side keyword filtering: title must contain all tokens
+            # of at least one role phrase. Description is not matched — it
+            # leaks unrelated roles (e.g. marketing jobs that mention engineers).
+            if not title_matches_phrases(title, phrases):
                 continue
 
             # Client-side location filtering (skip if "remote" requested and job is remote)

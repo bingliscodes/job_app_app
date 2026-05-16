@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 
 from jobapp.models import Job
-from jobapp.sourcing.base import JobSource
+from jobapp.sourcing.base import JobSource, parse_query_phrases, title_matches_phrases
 
 
 class TheMuseSource(JobSource):
@@ -18,7 +18,7 @@ class TheMuseSource(JobSource):
     async def search(self, query: str, location: str, max_results: int = 25, days_posted: int = 7) -> list[Job]:
         results: list[Job] = []
         page = 0
-        query_lower = query.lower()
+        phrases = parse_query_phrases(query)
 
         async with httpx.AsyncClient(timeout=30) as client:
             while len(results) < max_results:
@@ -41,8 +41,9 @@ class TheMuseSource(JobSource):
                 for item in page_results:
                     title = item.get("name", "")
 
-                    # Client-side keyword filtering
-                    if query_lower and not any(w in title.lower() for w in query_lower.split()):
+                    # Client-side keyword filtering: title must contain all tokens
+                    # of at least one role phrase.
+                    if not title_matches_phrases(title, phrases):
                         continue
 
                     company = item.get("company", {})
