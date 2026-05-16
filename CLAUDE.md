@@ -133,6 +133,7 @@ aggressively for that to be practical).
 - If the apply URL is on an aggregator (`adzuna.com`, `themuse.com`), `_click_through_if_aggregator()` finds and clicks the Apply button, then handles Adzuna's email-capture interstitial by clicking "No thanks, take me to the job". Click may open a new tab (target=_blank) or navigate the same page — both paths are raced.
 - After landing on the employer page, fills name/email/phone via CSS selector heuristics (`name`, `placeholder`, `id`, `aria-label`, `type=email|tel`) and uploads the resume PDF if a file input is present.
 - Never auto-submits. Waits on `sys.stdin.readline()` so the browser stays open until the user presses Enter in the terminal.
+- After click-through, scans the page title and h1/h2 headings for "Job Not Found" / "no longer available" / "expired" patterns (`_looks_like_dead_listing`). Aggregators don't prune their feeds — stale listings still appear in search results but their employer-side pages return 404-style content. When detected, prints a clear warning and skips pre-fill instead of fruitlessly chasing fields.
 
 ## Local State / Cache Files
 All gitignored, written to the working directory:

@@ -14,6 +14,54 @@ if TYPE_CHECKING:
 console = Console()
 
 
+_DEAD_LISTING_PATTERNS = (
+    "job not found",
+    "page not found",
+    "not found",
+    "no longer available",
+    "no longer accepting",
+    "this position has been filled",
+    "this job has been filled",
+    "this job is no longer",
+    "this posting is no longer",
+    "this opportunity is no longer",
+    "this requisition is no longer",
+    "position is no longer",
+    "job has expired",
+    "posting has expired",
+    "job has been removed",
+    "job has been closed",
+    "404",
+)
+
+
+async def _looks_like_dead_listing(page) -> bool:
+    """Heuristic: does this page look like a removed/expired job posting?
+
+    Checks the document title and the first few visible headings. Avoids
+    matching the full body text — generic words like "not found" might appear
+    in unrelated job-description language.
+    """
+    try:
+        title = (await page.title() or "").lower()
+        if any(pat in title for pat in _DEAD_LISTING_PATTERNS):
+            return True
+    except Exception:
+        pass
+
+    for tag in ("h1", "h2"):
+        try:
+            count = await page.locator(tag).count()
+            for i in range(min(count, 3)):
+                text = (await page.locator(tag).nth(i).text_content(timeout=1000) or "").lower()
+                if any(pat in text for pat in _DEAD_LISTING_PATTERNS):
+                    return True
+        except Exception:
+            continue
+
+    return False
+
+
 async def _click_bypass_link(page):
     """Look for an email-capture interstitial and click the bypass link.
 
@@ -166,6 +214,22 @@ class ApplicationBot:
             page = await self._click_through_if_aggregator(page)
             await page.bring_to_front()
             _activate_app_macos()
+
+            # Check whether the listing has been removed. Aggregators (especially
+            # The Muse) don't prune their feed, so we can land on a stale page
+            # whose body says "Job Not Found".
+            if await _looks_like_dead_listing(page):
+                console.print(
+                    "[red]This listing appears to be removed or expired "
+                    "(the destination page says the job is no longer available).[/red]"
+                )
+                console.print("[yellow]Skipping form pre-fill — nothing to fill on a 404 page.[/yellow]")
+                console.print("[bold]Browser is open — review and close manually.[/bold]")
+                console.print("[dim]Press Enter in this terminal when done...[/dim]")
+                import sys
+                sys.stdin.readline()
+                await browser.close()
+                return
 
             # Try to detect and fill common form fields
             filled = await self._try_fill_fields(page, resume_pdf_path)
