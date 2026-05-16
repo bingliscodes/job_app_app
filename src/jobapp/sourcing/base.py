@@ -11,7 +11,7 @@ class JobSource(ABC):
     name: str
 
     @abstractmethod
-    async def search(self, query: str, location: str, max_results: int = 25, days_posted: int = 7) -> list[Job]:
+    async def search(self, query: str, locations: list[str], max_results: int = 25, days_posted: int = 7) -> list[Job]:
         ...
 
 

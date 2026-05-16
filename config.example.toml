@@ -6,7 +6,11 @@ resume_path = "./my_resume.pdf"
 
 [preferences]
 roles = ["backend engineer", "software engineer", "full-stack developer"]
-locations = ["Sydney", "Remote"]
+# Locations are matched OR-style. "Remote" picks up remote roles; add city
+# names for hybrid/in-person searches.
+locations = ["Remote", "San Francisco, CA"]
+# Adzuna country endpoint (ISO 3166-1 alpha-2): us, gb, au, ca, etc.
+country = "us"
 max_results_per_source = 25
 days_posted = 7
 # Years-of-experience range. Filters out jobs with senior-coded titles

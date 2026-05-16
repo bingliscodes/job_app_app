@@ -47,7 +47,8 @@ resume_path = "./my_resume.pdf"
 
 [preferences]
 roles = ["backend engineer", "software engineer"]
-locations = ["Sydney", "Remote"]
+locations = ["Remote", "San Francisco, CA"]   # OR-style; mix Remote + cities
+country = "us"                                # routes Adzuna + post-filters non-US jobs
 days_posted = 7
 min_years = 0      # filter out roles that require more than max_years experience
 max_years = 4

@@ -14,7 +14,7 @@ class ArbeitnowSource(JobSource):
     name = "arbeitnow"
     BASE_URL = "https://www.arbeitnow.com/api/job-board-api"
 
-    async def search(self, query: str, location: str, max_results: int = 25, days_posted: int = 7) -> list[Job]:
+    async def search(self, query: str, locations: list[str], max_results: int = 25, days_posted: int = 7) -> list[Job]:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(self.BASE_URL)
             resp.raise_for_status()
@@ -23,7 +23,7 @@ class ArbeitnowSource(JobSource):
         raw_jobs = data if isinstance(data, list) else data.get("data", [])
 
         phrases = parse_query_phrases(query)
-        location_lower = location.lower()
+        locations_lower = [loc.lower() for loc in locations if loc]
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_posted)
 
         results = []
@@ -39,12 +39,17 @@ class ArbeitnowSource(JobSource):
             if not title_matches_phrases(title, phrases):
                 continue
 
-            # Client-side location filtering (skip if "remote" requested and job is remote)
-            if location_lower and location_lower != "remote":
-                if location_lower not in loc.lower():
-                    continue
-            elif location_lower == "remote":
-                if not item.get("remote", False) and "remote" not in loc.lower():
+            # Client-side location filtering: job must match any of the configured
+            # locations. "Remote" matches remote-flagged jobs or "remote" in location.
+            if locations_lower:
+                job_loc_lower = loc.lower()
+                is_remote_job = item.get("remote", False) or "remote" in job_loc_lower
+                matched = any(
+                    (want == "remote" and is_remote_job) or
+                    (want != "remote" and want in job_loc_lower)
+                    for want in locations_lower
+                )
+                if not matched:
                     continue
 
             # Parse date — can be ISO string or Unix timestamp

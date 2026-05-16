@@ -18,8 +18,9 @@ src/jobapp/
   cli.py              — Click CLI entry point, all commands
   config.py           — TOML config loading + env var override
   models.py           — Dataclasses: Job, ParsedResume, StructuredResume, TailoredMaterial
-  sourcing/           — Job board API clients (base.py, arbeitnow.py, themuse.py, adzuna.py)
-                        and experience.py (years-of-experience filter)
+  sourcing/           — Job board API clients (base.py, arbeitnow.py, themuse.py, adzuna.py),
+                        experience.py (years-of-experience filter), and
+                        location_filter.py (US/remote post-filter)
   resume/parser.py    — PDF/DOCX/TXT text extraction + Claude-powered structured extraction
   resume/templates/   — HTML/CSS templates for resume and cover letter PDFs
   tailor/engine.py    — Claude API integration, constrained tailoring + verification pass
@@ -81,11 +82,18 @@ on `search` and `pipeline`. Two heuristic signals (`sourcing/experience.py`):
 Lenient by design: jobs with no detectable experience signal are kept. The Muse's native
 `level=` filter is also passed (`Entry Level`, `Mid Level`, etc.) via `themuse_levels_for_range()`.
 
+## Location & Country Filtering
+- `[preferences].country` (ISO 3166-1 alpha-2) routes Adzuna to the matching country endpoint (`/us`, `/gb`, `/au`, etc.).
+- `[preferences].locations` is a list; sources OR the values. The Muse accepts repeated `location=` query params. Adzuna's `where` is single-valued, so AdzunaSource issues one request per non-remote location plus a nationwide request when "Remote" is among the locations.
+- When `country == "us"`, a post-source filter (`sourcing/location_filter.py`) drops jobs whose only specific locations are foreign (e.g. "Flexible / Remote, Bangalore, India"). Jobs with any US-state tag, "United States", "USA", or remote-with-no-foreign-country pass.
+- Arbeitnow is disabled by default in `sourcing/__init__.py` (EU-focused). Re-enable by adding `ArbeitnowSource()` to the `sources` list.
+
 ## Development Notes
 - Job search results are cached to `.jobapp_cache.json` (gitignored) so tailor/apply can reference jobs by ID
 - The Arbeitnow API returns `created_at` as a Unix timestamp (int), not ISO string
 - The Muse API has no keyword search param — filtering is done client-side on job title
-- The Muse API accepts repeated `level=` query params for filtering by seniority
+- The Muse API accepts repeated `level=` and `location=` query params for OR filtering
 - Adzuna requires app_id + app_key; source is skipped silently if keys aren't configured
+- Sources receive `locations: list[str]`; each decides how to use it
 - Claude's JSON response sometimes comes wrapped in ```json fences — the tailor engine strips these
 - Browser automation detects common form fields by CSS selectors (name, email, phone, file upload)

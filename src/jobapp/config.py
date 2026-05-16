@@ -18,11 +18,12 @@ class UserConfig:
 @dataclass
 class PreferencesConfig:
     roles: list[str] = field(default_factory=lambda: ["software engineer"])
-    locations: list[str] = field(default_factory=lambda: ["Remote"])
+    locations: list[str] = field(default_factory=lambda: ["Remote", "United States"])
     max_results_per_source: int = 25
     days_posted: int = 7
     min_years: int = 0
     max_years: int = 4
+    country: str = "us"  # ISO 3166-1 alpha-2; used for Adzuna country endpoint
 
 
 @dataclass

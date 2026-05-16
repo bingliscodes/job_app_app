@@ -15,18 +15,18 @@ class TheMuseSource(JobSource):
     def __init__(self, levels: list[str] | None = None):
         self.levels = levels or []
 
-    async def search(self, query: str, location: str, max_results: int = 25, days_posted: int = 7) -> list[Job]:
+    async def search(self, query: str, locations: list[str], max_results: int = 25, days_posted: int = 7) -> list[Job]:
         results: list[Job] = []
         page = 0
         phrases = parse_query_phrases(query)
 
         async with httpx.AsyncClient(timeout=30) as client:
             while len(results) < max_results:
-                # httpx serializes list values as repeated query params, which is what
-                # The Muse expects for level= filters.
+                # The Muse accepts repeated location= / level= params for OR filtering.
                 params: list[tuple[str, str]] = [("page", str(page))]
-                if location:
-                    params.append(("location", location))
+                for loc in locations:
+                    if loc:
+                        params.append(("location", loc))
                 for level in self.levels:
                     params.append(("level", level))
 
