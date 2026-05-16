@@ -145,6 +145,16 @@ because of flaky network.
 - Never auto-submits. Waits on `sys.stdin.readline()` so the browser stays open until the user presses Enter in the terminal.
 - After click-through, scans the page title and h1/h2 headings for "Job Not Found" / "no longer available" / "expired" patterns (`_looks_like_dead_listing`). Aggregators don't prune their feeds — stale listings still appear in search results but their employer-side pages return 404-style content. When detected, prints a clear warning and skips pre-fill instead of fruitlessly chasing fields.
 
+## Job Deduplication
+Two-pass dedupe in `search_all_sources()`:
+
+1. **By URL** — catches cross-source duplicates and Adzuna's per-request repeats.
+2. **By `(company.lower(), title.lower())`** — catches the same posting listed under
+   multiple cities (e.g. GE Vernova lists one role under 6 US locations). Conservative
+   on purpose: real distinct roles usually have a team/function suffix in the title
+   (e.g. GitLab "Backend Engineer, Database Automation" vs "Backend Engineer, Monitor"),
+   so exact title match doesn't collapse those.
+
 ## Local State / Cache Files
 All gitignored, written to the working directory:
 

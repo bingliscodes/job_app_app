@@ -84,14 +84,23 @@ async def search_all_sources(
 
     all_results = await asyncio.gather(*[_search_one(s) for s in sources])
 
-    # Flatten and deduplicate by URL
+    # Flatten and deduplicate. Two passes:
+    # 1. By URL — exact duplicates between sources / requests
+    # 2. By (company, title) — same posting listed under multiple cities
+    #    (e.g. GE Vernova lists the same role under 6 different US locations)
     seen_urls: set[str] = set()
+    seen_signatures: set[tuple[str, str]] = set()
     jobs: list[Job] = []
     for batch in all_results:
         for job in batch:
-            if job.url and job.url not in seen_urls:
-                seen_urls.add(job.url)
-                jobs.append(job)
+            if not job.url or job.url in seen_urls:
+                continue
+            sig = (job.company.strip().lower(), job.title.strip().lower())
+            if sig in seen_signatures:
+                continue
+            seen_urls.add(job.url)
+            seen_signatures.add(sig)
+            jobs.append(job)
 
     # Apply years-of-experience filter (lenient: keep jobs where no signal detected)
     before = len(jobs)

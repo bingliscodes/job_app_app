@@ -294,8 +294,62 @@ def _serialize_resume(resume: StructuredResume) -> str:
 
 
 def _parse_json_response(text: str) -> dict:
+    """Parse a JSON object out of a Claude response.
+
+    Handles three common shapes:
+    1. Bare JSON: `{...}`
+    2. Fenced JSON: ```json\n{...}\n``` (or ``` without lang tag)
+    3. JSON with prose prefix/suffix: "Here is the result:\n{...}"
+
+    Falls back to brace-matching the largest balanced `{...}` block when
+    direct parsing fails, then re-raises with the original text in the
+    error message so the user can see what Claude actually returned.
+    """
     text = text.strip()
+
+    # Strip ```json or ``` fences if present
     if text.startswith("```"):
-        text = text.split("\n", 1)[1]
-        text = text.rsplit("```", 1)[0]
-    return json.loads(text)
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline + 1:]
+        if text.endswith("```"):
+            text = text[: -3].rstrip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Find a balanced JSON object by scanning braces. Skips quoted-string
+    # contents so braces inside strings don't throw the count off.
+    start = text.find("{")
+    if start == -1:
+        raise ValueError(f"No JSON object found in response:\n{text[:500]}")
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = text[start:i + 1]
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    break
+
+    raise ValueError(f"Could not parse JSON from response:\n{text[:500]}")
