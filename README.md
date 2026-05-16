@@ -95,6 +95,18 @@ Jobs are excluded when:
 Postings with no detectable signal are kept (lenient). Override per-call with
 `--min-years` / `--max-years` on `search` and `pipeline`.
 
+#### Login-walled company filter
+
+Many large employers (Apple, Microsoft, Google, big banks, Workday-using Fortune 500)
+require account creation before you can apply. These dead-end the browser pre-fill, so
+jobs from those companies are dropped after sourcing. See
+`src/jobapp/sourcing/account_required.py` for the default list. Extend in `config.toml`:
+
+```toml
+[preferences]
+extra_account_required_companies = ["acme corp", "stripe"]
+```
+
 ### Tailor your resume
 
 ```bash

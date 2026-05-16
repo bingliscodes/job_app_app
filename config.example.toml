@@ -18,6 +18,9 @@ days_posted = 7
 # more than max_years. Jobs with no detectable experience signal are kept.
 min_years = 0
 max_years = 4
+# Extra companies (case-insensitive substring match) to treat as login-walled.
+# Adds to the built-in list in sourcing/account_required.py.
+extra_account_required_companies = []
 
 [api_keys]
 # Can also be set via environment variables (ANTHROPIC_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY)

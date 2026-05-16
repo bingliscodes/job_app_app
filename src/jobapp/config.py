@@ -24,6 +24,9 @@ class PreferencesConfig:
     min_years: int = 0
     max_years: int = 4
     country: str = "us"  # ISO 3166-1 alpha-2; used for Adzuna country endpoint
+    # Additional companies to treat as login-walled (extend the built-in list
+    # in sourcing/account_required.py:DEFAULT_ACCOUNT_REQUIRED).
+    extra_account_required_companies: list[str] = field(default_factory=list)
 
 
 @dataclass

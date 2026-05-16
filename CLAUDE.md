@@ -19,8 +19,9 @@ src/jobapp/
   config.py           — TOML config loading + env var override
   models.py           — Dataclasses: Job, ParsedResume, StructuredResume, TailoredMaterial
   sourcing/           — Job board API clients (base.py, arbeitnow.py, themuse.py, adzuna.py),
-                        experience.py (years-of-experience filter), and
-                        location_filter.py (US/remote post-filter)
+                        experience.py (years-of-experience filter),
+                        location_filter.py (US/remote post-filter), and
+                        account_required.py (login-wall company filter)
   resume/parser.py    — PDF/DOCX/TXT text extraction + Claude-powered structured extraction
   resume/templates/   — HTML/CSS templates for resume and cover letter PDFs
   tailor/engine.py    — Claude API integration, constrained tailoring + verification pass
@@ -91,6 +92,16 @@ keyed by file mtime — the first search builds it via one Claude call, subseque
 searches reuse it. Use `--no-skills` on `search` / `pipeline` to skip resume parsing.
 Adzuna per-request errors (intermittent 503s) are swallowed so one bad request doesn't
 sink the batch.
+
+## Login-Walled Company Filter
+`sourcing/account_required.py:DEFAULT_ACCOUNT_REQUIRED` is a curated set of company-name
+patterns whose career sites consistently require account creation (Apple, Microsoft,
+Google, big banks, Workday-using Fortune 500, etc.). After all other filters, jobs whose
+`company` matches a pattern are dropped — these dead-end on a login wall during `apply`.
+Matching: word-boundary substring, case-insensitive. Extend via
+`[preferences].extra_account_required_companies` in config.toml as you discover more.
+No URL resolution is attempted (Adzuna rate-limits the `/land/ad/` redirect URL too
+aggressively for that to be practical).
 
 ## Location & Country Filtering
 - `[preferences].country` (ISO 3166-1 alpha-2) routes Adzuna to the matching country endpoint (`/us`, `/gb`, `/au`, etc.).

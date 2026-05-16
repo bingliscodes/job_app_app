@@ -10,6 +10,10 @@ from jobapp.sourcing.themuse import TheMuseSource
 from jobapp.sourcing.adzuna import AdzunaSource
 from jobapp.sourcing.experience import job_matches_experience, themuse_levels_for_range
 from jobapp.sourcing.location_filter import location_is_us_or_remote
+from jobapp.sourcing.account_required import (
+    DEFAULT_ACCOUNT_REQUIRED,
+    company_requires_account,
+)
 
 if TYPE_CHECKING:
     from jobapp.config import Config
@@ -108,6 +112,19 @@ async def search_all_sources(
                 f"  [dim]Location filter (US/remote): "
                 f"{before} → {len(jobs)} jobs[/dim]"
             )
+
+    # Drop jobs at companies known to require account creation to apply
+    # (Apple, Microsoft, Google, Big Banks, etc.). Extend via
+    # [preferences].extra_account_required_companies in config.toml.
+    extra = {c.lower() for c in cfg.preferences.extra_account_required_companies}
+    blocklist = frozenset(DEFAULT_ACCOUNT_REQUIRED | extra)
+    before = len(jobs)
+    jobs = [j for j in jobs if not company_requires_account(j.company, blocklist)]
+    if before != len(jobs):
+        console.print(
+            f"  [dim]Login-wall filter (account required): "
+            f"{before} → {len(jobs)} jobs[/dim]"
+        )
 
     # Sort by posted date descending (most recent first)
     jobs.sort(key=lambda j: j.posted_date, reverse=True)

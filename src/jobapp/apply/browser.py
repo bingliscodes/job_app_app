@@ -72,24 +72,49 @@ async def _click_bypass_link(page):
 
 
 async def _dismiss_overlays(page) -> None:
-    """Best-effort: close cookie banners and email-signup modals that block clicks."""
-    dismiss_selectors = [
+    """Best-effort: close cookie banners and email-signup modals that block clicks.
+
+    Adzuna sometimes shows an email-capture modal on page load ("Leave us your
+    email address and we'll send you similar new jobs"). The close action is
+    inconsistent across versions — a close icon, a "No thanks" link, or ESC.
+    """
+    # Adzuna's "No thanks, take me to the job" link sometimes also closes the
+    # on-load email modal without navigating away. Try it first.
+    text_dismissals = [
+        'a:has-text("No thanks, take me to the job")',
+        'a:has-text("No thanks")',
+        'button:has-text("No thanks")',
         'button:has-text("Accept all")',
         'button:has-text("Accept")',
         'button:has-text("I agree")',
         'button:has-text("Got it")',
-        'button:has-text("No thanks")',
         'button:has-text("Close")',
+        'a:has-text("Close")',
+    ]
+    icon_dismissals = [
         'button[aria-label*="close" i]',
         'button[aria-label*="dismiss" i]',
+        'a[aria-label*="close" i]',
+        '[role="button"][aria-label*="close" i]',
+        # Adzuna's email modal close: a clickable element near "Receive similar jobs"
+        '[class*="modal" i] [class*="close" i]',
+        '[class*="popup" i] [class*="close" i]',
     ]
-    for selector in dismiss_selectors:
+    for selector in text_dismissals + icon_dismissals:
         try:
             el = page.locator(selector).first
             if await el.count() > 0 and await el.is_visible(timeout=500):
                 await el.click(timeout=2000)
+                # one click is usually enough; give the modal a beat to close
+                await page.wait_for_timeout(200)
         except Exception:
             continue
+
+    # Last resort: ESC often closes modals that don't expose a close control.
+    try:
+        await page.keyboard.press("Escape")
+    except Exception:
+        pass
 
 
 def _activate_app_macos() -> None:
@@ -168,8 +193,9 @@ class ApplicationBot:
 
         console.print(f"  [dim]On aggregator ({host}); looking for Apply button...[/dim]")
 
-        # Try to dismiss common overlays (cookie banners, email-signup modals)
-        # that block the Apply button.
+        # Give modals/popups a moment to render before we try to dismiss them
+        # (Adzuna's email-capture overlay appears with a small delay on load).
+        await page.wait_for_timeout(1000)
         await _dismiss_overlays(page)
 
         apply_selectors = [
