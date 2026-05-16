@@ -10,6 +10,19 @@ US_STATE_ABBREVS = frozenset({
     "WI", "WY", "DC",
 })
 
+US_STATE_NAMES = frozenset({
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho",
+    "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
+    "maryland", "massachusetts", "michigan", "minnesota", "mississippi",
+    "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
+    "new mexico", "new york", "north carolina", "north dakota", "ohio",
+    "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina",
+    "south dakota", "tennessee", "texas", "utah", "vermont", "virginia",
+    "washington", "west virginia", "wisconsin", "wyoming",
+    "district of columbia",
+})
+
 # Common non-US country/region tokens that appear in Muse-style location strings.
 # A job whose only specific tags are these (with no US-state tag) is treated as
 # non-US even if also marked Remote.
@@ -38,8 +51,10 @@ def _location_is_us(name: str) -> bool:
     n_lower = n.lower()
     if "united states" in n_lower or n_lower.endswith(", usa"):
         return True
-    # A bare state abbrev (post-comma-split): "CA", "NY", etc.
-    if n.upper() in US_STATE_ABBREVS:
+    # Bare country/state markers (post-comma-split).
+    if n.upper() in {"US", "USA"} or n.upper() in US_STATE_ABBREVS:
+        return True
+    if n_lower in US_STATE_NAMES:
         return True
     for m in _STATE_SUFFIX_RE.finditer(n):
         if m.group(1) in US_STATE_ABBREVS:

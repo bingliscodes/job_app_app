@@ -24,6 +24,7 @@ async def search_all_sources(
     limit: int | None = None,
     min_years: int | None = None,
     max_years: int | None = None,
+    use_skills: bool = True,
 ) -> list[Job]:
     """Search all configured job sources in parallel and return deduplicated results."""
     search_query = query or " OR ".join(cfg.preferences.roles)
@@ -34,6 +35,24 @@ async def search_all_sources(
     max_yr = cfg.preferences.max_years if max_years is None else max_years
 
     themuse_levels = themuse_levels_for_range(min_yr, max_yr)
+
+    # Load skills from the cached structured resume (or build the cache on
+    # first run). Used by Adzuna's what_or to broaden discovery. Skipped if
+    # use_skills=False or anthropic key isn't set.
+    skills: list[str] = []
+    if use_skills and cfg.api_keys.anthropic:
+        try:
+            from jobapp.resume.parser import get_cached_structured_resume
+            console.print("  [dim]Loading resume skills...[/dim]")
+            structured = get_cached_structured_resume(
+                cfg.user.resume_path,
+                api_key=cfg.api_keys.anthropic,
+                model=cfg.ai.model,
+            )
+            skills = structured.skills
+            console.print(f"  [dim]Skills available for search: {len(skills)}[/dim]")
+        except Exception as e:
+            console.print(f"  [yellow]Skills cache unavailable: {e}[/yellow]")
 
     # Arbeitnow disabled — EU-focused, returns mostly German postings. Re-enable
     # by adding ArbeitnowSource() to this list.
@@ -46,6 +65,7 @@ async def search_all_sources(
             cfg.api_keys.adzuna_app_id,
             cfg.api_keys.adzuna_app_key,
             country=cfg.preferences.country,
+            skills=skills,
         ))
 
     async def _search_one(source):

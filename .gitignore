@@ -8,3 +8,4 @@ config.toml
 output/
 .playwright/
 .jobapp_cache.json
+.jobapp_resume_cache.json

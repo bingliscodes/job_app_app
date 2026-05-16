@@ -134,6 +134,99 @@ def structure_resume(parsed: ParsedResume, api_key: str, model: str = "claude-so
     )
 
 
+_RESUME_CACHE_PATH = Path(".jobapp_resume_cache.json")
+
+
+def get_cached_structured_resume(
+    resume_path: str,
+    api_key: str,
+    model: str = "claude-sonnet-4-20250514",
+) -> StructuredResume:
+    """Return a structured resume, using a local cache keyed by file mtime+path.
+
+    If the cache is missing or the resume file has changed since it was cached,
+    re-parse and re-structure (one Claude call) and update the cache.
+    """
+    p = Path(resume_path)
+    if not p.exists():
+        raise FileNotFoundError(f"Resume not found: {p.resolve()}")
+    mtime = p.stat().st_mtime
+    cache_key = f"{p.resolve()}::{mtime}"
+
+    if _RESUME_CACHE_PATH.exists():
+        try:
+            cached = json.loads(_RESUME_CACHE_PATH.read_text())
+            if cached.get("cache_key") == cache_key:
+                return _structured_from_dict(cached["data"])
+        except (json.JSONDecodeError, KeyError):
+            pass  # fall through to re-parse
+
+    parsed = parse_resume(resume_path)
+    structured = structure_resume(parsed, api_key=api_key, model=model)
+    _RESUME_CACHE_PATH.write_text(json.dumps({
+        "cache_key": cache_key,
+        "data": _structured_to_dict(structured),
+    }, indent=2))
+    return structured
+
+
+def _structured_to_dict(s: StructuredResume) -> dict:
+    return {
+        "name": s.name,
+        "contact": s.contact,
+        "summary": s.summary,
+        "skills": s.skills,
+        "experience": [
+            {"company": e.company, "title": e.title, "dates": e.dates, "bullets": e.bullets}
+            for e in s.experience
+        ],
+        "education": [
+            {"institution": e.institution, "degree": e.degree, "dates": e.dates, "details": e.details}
+            for e in s.education
+        ],
+        "projects": [
+            {"name": p.name, "description": p.description, "technologies": p.technologies}
+            for p in s.projects
+        ],
+        "certifications": s.certifications,
+        "raw_text": s.raw_text,
+        "source_path": s.source_path,
+    }
+
+
+def _structured_from_dict(d: dict) -> StructuredResume:
+    return StructuredResume(
+        name=d.get("name", ""),
+        contact=d.get("contact", ""),
+        summary=d.get("summary", ""),
+        skills=d.get("skills", []),
+        experience=[
+            ExperienceEntry(
+                company=e.get("company", ""), title=e.get("title", ""),
+                dates=e.get("dates", ""), bullets=e.get("bullets", []),
+            )
+            for e in d.get("experience", [])
+        ],
+        education=[
+            EducationEntry(
+                institution=e.get("institution", ""), degree=e.get("degree", ""),
+                dates=e.get("dates", ""), details=e.get("details", []),
+            )
+            for e in d.get("education", [])
+        ],
+        projects=[
+            ProjectEntry(
+                name=p.get("name", ""), description=p.get("description", ""),
+                technologies=p.get("technologies", []),
+            )
+            for p in d.get("projects", [])
+        ],
+        certifications=d.get("certifications", []),
+        raw_text=d.get("raw_text", ""),
+        source_path=d.get("source_path", ""),
+    )
+
+
 def _parse_pdf(path: Path) -> str:
     from pypdf import PdfReader
 

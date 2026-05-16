@@ -72,7 +72,13 @@ API keys can also be set via environment variables:
 jobapp search
 jobapp search --query "python backend" --location "Remote" --limit 20
 jobapp search --min-years 0 --max-years 4   # target entry/mid-level only
+jobapp search --no-skills                   # skip resume-skills broadening on Adzuna
 ```
+
+On the first run, `search` parses your resume and caches the extracted skills to
+`.jobapp_resume_cache.json` (gitignored). Adzuna uses those skills as a `what_or`
+broadening query alongside `what_phrase` per role. Subsequent runs reuse the cache
+unless the resume file changes.
 
 Displays a table of recent jobs with short IDs.
 

@@ -82,6 +82,16 @@ on `search` and `pipeline`. Two heuristic signals (`sourcing/experience.py`):
 Lenient by design: jobs with no detectable experience signal are kept. The Muse's native
 `level=` filter is also passed (`Entry Level`, `Mid Level`, etc.) via `themuse_levels_for_range()`.
 
+## Skills-Aware Search (Adzuna)
+Adzuna issues one request per (role_phrase × where) using `what_phrase` (exact match),
+plus one request per `where` using `what_or = top resume skills` to broaden discovery.
+The role-phrase title matcher is applied to results so skills-broadened jobs don't leak
+non-engineer roles. Resume skills come from a local cache (`.jobapp_resume_cache.json`)
+keyed by file mtime — the first search builds it via one Claude call, subsequent
+searches reuse it. Use `--no-skills` on `search` / `pipeline` to skip resume parsing.
+Adzuna per-request errors (intermittent 503s) are swallowed so one bad request doesn't
+sink the batch.
+
 ## Location & Country Filtering
 - `[preferences].country` (ISO 3166-1 alpha-2) routes Adzuna to the matching country endpoint (`/us`, `/gb`, `/au`, etc.).
 - `[preferences].locations` is a list; sources OR the values. The Muse accepts repeated `location=` query params. Adzuna's `where` is single-valued, so AdzunaSource issues one request per non-remote location plus a nationwide request when "Remote" is among the locations.
