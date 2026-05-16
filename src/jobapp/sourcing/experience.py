@@ -17,6 +17,11 @@ SENIOR_TITLE_PATTERNS = [
     re.compile(r"\bdirector\b", re.IGNORECASE),
     re.compile(r"\bchief\b", re.IGNORECASE),
     re.compile(r"\bmanager\b", re.IGNORECASE),
+    re.compile(r"\barchitect\b", re.IGNORECASE),
+    re.compile(r"\bsupervisor\b", re.IGNORECASE),
+    # Roman numeral level suffixes (II, III, IV, V) at the end of a title or
+    # as a standalone word, e.g. "Engineer III" or "Engineer II - Backend".
+    re.compile(r"\b(II|III|IV|V)\b(?!\w)"),
 ]
 
 # Matches "5 years", "5+ years", "5-7 years", "5 to 7 years"; captures the lower bound.
