@@ -61,6 +61,22 @@ Resume guidelines:
   `[LinkedIn](https://...)`). When `github_url` and `linkedin_url` are provided in the
   input, ALWAYS include them as Markdown links in the contact line.
 
+- **Experience entries — use exactly this Markdown structure**:
+
+  ```
+  ### {Job Title} — {Company}
+  *{Dates}*
+
+  - First bullet
+  - Second bullet
+  - Third bullet
+  ```
+
+  Each bullet MUST be on its own line, starting with `- ` (dash + space).
+  The dates line MUST be separated from the bullets by a blank line.
+  Do NOT put bullets on the same line as the title, the dates, or each other.
+  Do NOT separate bullets with `•` characters inline — use real Markdown list items.
+
 Cover letter guidelines:
 - Address to "Hiring Manager"
 - 3-4 paragraphs connecting EXISTING experience to the role
